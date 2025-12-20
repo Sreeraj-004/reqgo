@@ -1,0 +1,13 @@
+# Frontend
+node_modules/
+dist/
+.env
+
+# Backend
+venv/
+__pycache__/
+*.pyc
+.env
+
+# OS junk
+.DS_Store
