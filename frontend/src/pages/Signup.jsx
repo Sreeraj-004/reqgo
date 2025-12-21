@@ -55,7 +55,6 @@ export default function Signup() {
       localStorage.setItem("user", JSON.stringify(data.user));
       localStorage.setItem("Role", data.user.role);
 
-      // Redirect based on role
       navigate(`/registration`);
     } catch (err) {
       setError(err.message || "Something went wrong. Backend went on tea break ☕");

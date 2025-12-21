@@ -65,7 +65,7 @@ export default function PrincipalRegister() {
         throw new Error(data.detail || "College registration failed");
       }
 
-      navigate("/principal/dashboard");
+      navigate("/dashboard");
     } catch (err) {
       console.error(err.message);
     }
