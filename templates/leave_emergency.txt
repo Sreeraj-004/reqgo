@@ -1,0 +1,5 @@
+I am writing to inform you that I need to take leave from {{from_date}} to {{to_date}} due to an unforeseen emergency.
+
+The situation requires my immediate attention, and I will ensure proper communication regarding any pending responsibilities.
+
+I kindly request you to grant me leave for the mentioned duration and appreciate your consideration.

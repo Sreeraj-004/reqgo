@@ -1,0 +1,5 @@
+I am writing to inform you that I will be unable to attend from {{from_date}} to {{to_date}} due to medical reasons.
+
+I have been advised to take proper rest during this period to ensure a complete recovery and avoid further health complications.
+
+I kindly request you to grant me leave for the mentioned duration and assure you of my sincere commitment upon resuming duties.
