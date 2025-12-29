@@ -41,6 +41,7 @@ class College(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     principal = relationship("User")
+    department_list = relationship("departments", back_populates="college", cascade="all, delete-orphan")
 
 
 class LeaveRequest(Base):
@@ -50,7 +51,7 @@ class LeaveRequest(Base):
     student_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     approver_id = Column(Integer, ForeignKey("users.id"), nullable=True)
 
-    leave_type = Column(String(50), nullable=False)  # emergency, medical, personal, wedding
+    leave_type = Column(String(50), nullable=False)  # idcard, medical, personal, uniform
     subject = Column(String(255), nullable=False)
     body = Column(Text, nullable=True)
     reason = Column(Text, nullable=True)
@@ -98,6 +99,21 @@ class LeaveMessage(Base):
     sender = relationship("User")
 
 
+class departments(Base):
+    """Department model. Each department belongs to a college."""
+
+    __tablename__ = "departments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(255), nullable=False)
+    college_id = Column(Integer, ForeignKey("colleges.id"), nullable=False)
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    college = relationship("College", back_populates="department_list")
+    access_requests = relationship("AccessRequest", back_populates="department")
+
+
 class AccessRequest(Base):
     """
     Generic access request for:
@@ -113,10 +129,12 @@ class AccessRequest(Base):
     role_requested = Column(String(50), nullable=False)
     college_name = Column(String(255), nullable=False)
     department_name = Column(String(255), nullable=True)
+    department_id = Column(Integer, ForeignKey("departments.id", ondelete="SET NULL"), nullable=True)
     status = Column(String(20), nullable=False, default="pending")  # pending/approved/rejected
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     user = relationship("User")
+    department = relationship("departments", back_populates="access_requests")
 
 

@@ -5,6 +5,7 @@ from typing import List, Optional
 import jwt
 from fastapi import Depends, FastAPI, HTTPException, status
 from passlib.context import CryptContext
+from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 from sqlalchemy.orm import Session
 
 from . import models, schemas
@@ -61,18 +62,37 @@ def create_user(user_in: schemas.UserCreate, db: Session = Depends(get_db)):
             detail="Email is already registered.",
         )
 
-    hashed_password = get_password_hash(user_in.password)
-    user = models.User(
-        name=user_in.name,
-        email=user_in.email,
-        hashed_password=hashed_password,
-        role=user_in.role,
-    )
-    db.add(user)
-    db.commit()
-    db.refresh(user)
+    try:
+        hashed_password = get_password_hash(user_in.password)
+        user = models.User(
+            name=user_in.name,
+            email=user_in.email,
+            hashed_password=hashed_password,
+            role=user_in.role,
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+    except IntegrityError as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Failed to create user. Email may already be registered.",
+        )
+    except SQLAlchemyError as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Database error occurred while creating user.",
+        )
 
-    jwt_token = create_jwt_for_user(user)
+    try:
+        jwt_token = create_jwt_for_user(user)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to generate authentication token.",
+        )
 
     return schemas.AuthResponse(
         message="Signup successful",
@@ -127,6 +147,26 @@ def register_college(
     db.add(college)
     db.commit()
     db.refresh(college)
+
+    # Create department records in the departments table
+    if data.departments:
+        for dept_name in data.departments:
+            # Check if department already exists for this college
+            existing_dept = (
+                db.query(models.departments)
+                .filter(
+                    models.departments.college_id == college.id,
+                    models.departments.name == dept_name.strip()
+                )
+                .first()
+            )
+            if not existing_dept:
+                dept = models.departments(
+                    name=dept_name.strip(),
+                    college_id=college.id,
+                )
+                db.add(dept)
+        db.commit()
 
     return college
 
@@ -215,11 +255,33 @@ def request_hod_access(
             detail="College does not exist. A Principal must register it first.",
         )
 
+    # Try to find or create the department record
+    department_id = None
+    if data.department_name:
+        dept = (
+            db.query(models.departments)
+            .filter(
+                models.departments.college_id == college.id,
+                models.departments.name == data.department_name.strip()
+            )
+            .first()
+        )
+        if not dept:
+            # Create department if it doesn't exist (for backward compatibility)
+            dept = models.departments(
+                name=data.department_name.strip(),
+                college_id=college.id,
+            )
+            db.add(dept)
+            db.flush()  # Flush to get the ID without committing
+        department_id = dept.id
+
     access_request = models.AccessRequest(
         user_id=user.id,
         role_requested="hod",
         college_name=data.college_name,
         department_name=data.department_name,
+        department_id=department_id,
         status="pending",
     )
     db.add(access_request)
@@ -258,11 +320,33 @@ def request_student_access(
             detail="College does not exist. A Principal must register it first.",
         )
 
+    # Try to find or create the department record
+    department_id = None
+    if data.department_name:
+        dept = (
+            db.query(models.departments)
+            .filter(
+                models.departments.college_id == college.id,
+                models.departments.name == data.department_name.strip()
+            )
+            .first()
+        )
+        if not dept:
+            # Create department if it doesn't exist (for backward compatibility)
+            dept = models.departments(
+                name=data.department_name.strip(),
+                college_id=college.id,
+            )
+            db.add(dept)
+            db.flush()  # Flush to get the ID without committing
+        department_id = dept.id
+
     access_request = models.AccessRequest(
         user_id=user.id,
         role_requested="student",
         college_name=data.college_name,
         department_name=data.department_name,
+        department_id=department_id,
         status="pending",
     )
     db.add(access_request)
@@ -274,14 +358,27 @@ def request_student_access(
 
 @app.post("/auth/login", response_model=schemas.AuthResponse)
 def login(credentials: schemas.LoginRequest, db: Session = Depends(get_db)):
-    user = get_user_by_email(db, credentials.email)
+    try:
+        user = get_user_by_email(db, credentials.email)
+    except SQLAlchemyError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Database error occurred while logging in.",
+        )
+
     if not user or not verify_password(credentials.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
         )
 
-    jwt_token = create_jwt_for_user(user)
+    try:
+        jwt_token = create_jwt_for_user(user)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to generate authentication token.",
+        )
 
     return schemas.AuthResponse(
         message="Login successful",
@@ -607,10 +704,10 @@ def render_leave_body(
     """
     templates_dir = Path(__file__).resolve().parent.parent / "templates"
     template_map = {
-        "emergency": "leave_emergency.txt",
+        "idcard": "idcard_missing.txt",
         "medical": "leave_medical.txt",
         "personal": "leave_personal.txt",
-        "wedding": "leave_wedding.txt",
+        "uniform": "uniform_damage.txt",
     }
 
     template_name = template_map.get(leave_type.lower())

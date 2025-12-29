@@ -33,7 +33,7 @@ class AuthResponse(BaseModel):
 
 
 class LeaveBase(BaseModel):
-    leave_type: str  # emergency, medical, personal, wedding
+    leave_type: str  # idcard, medical, personal, uniform
     subject: str
     reason: Optional[str] = None
     from_date: date
