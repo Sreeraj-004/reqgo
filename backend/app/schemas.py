@@ -21,6 +21,9 @@ class UserProfile(BaseModel):
     name: str
     email: EmailStr
     role: str
+    college_name: Optional[str] = None
+    department_name: Optional[str] = None
+    access_status: Optional[str] = None
 
     class Config:
         from_attributes = True

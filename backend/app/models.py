@@ -12,6 +12,11 @@ class User(Base):
     email = Column(String(255), unique=True, index=True, nullable=False)
     hashed_password = Column(String(255), nullable=False)
     role = Column(String(50), nullable=False, default="student")  # student, faculty, admin
+    
+    # College and department assignment
+    college_name = Column(String(255), nullable=True)
+    department_name = Column(String(255), nullable=True)
+    access_status = Column(String(20), nullable=True, default="pending")  # pending/approved/rejected
 
     leave_requests = relationship(
         "LeaveRequest",
@@ -98,25 +103,5 @@ class LeaveMessage(Base):
     sender = relationship("User")
 
 
-class AccessRequest(Base):
-    """
-    Generic access request for:
-    - vice_principal
-    - hod
-    - student
-    """
-
-    __tablename__ = "access_requests"
-
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    role_requested = Column(String(50), nullable=False)
-    college_name = Column(String(255), nullable=False)
-    department_name = Column(String(255), nullable=True)
-    status = Column(String(20), nullable=False, default="pending")  # pending/approved/rejected
-
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-
-    user = relationship("User")
 
 

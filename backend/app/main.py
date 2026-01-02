@@ -140,7 +140,7 @@ def register_college(
     return college
 
 
-@app.post("/access/vice-principal", response_model=schemas.AccessRequestOut)
+@app.post("/access/vice-principal", response_model=schemas.UserProfile)
 def request_vice_principal_access(
     data: schemas.VicePrincipalAccessRequest,
     db: Session = Depends(get_db),
@@ -169,21 +169,18 @@ def request_vice_principal_access(
             detail="College does not exist. A Principal must register it first.",
         )
 
-    access_request = models.AccessRequest(
-        user_id=user.id,
-        role_requested="vice_principal",
-        college_name=data.college_name,
-        department_name=None,
-        status="pending",
-    )
-    db.add(access_request)
+    # Update user's college and set access status to pending
+    user.college_name = data.college_name
+    user.department_name = None
+    user.access_status = "pending"
+    
     db.commit()
-    db.refresh(access_request)
+    db.refresh(user)
 
-    return access_request
+    return user
 
 
-@app.post("/access/hod", response_model=schemas.AccessRequestOut)
+@app.post("/access/hod", response_model=schemas.UserProfile)
 def request_hod_access(
     data: schemas.HODAccessRequest,
     db: Session = Depends(get_db),
@@ -212,21 +209,18 @@ def request_hod_access(
             detail="College does not exist. A Principal must register it first.",
         )
 
-    access_request = models.AccessRequest(
-        user_id=user.id,
-        role_requested="hod",
-        college_name=data.college_name,
-        department_name=data.department_name,
-        status="pending",
-    )
-    db.add(access_request)
+    # Update user's college and department, set access status to pending
+    user.college_name = data.college_name
+    user.department_name = data.department_name
+    user.access_status = "pending"
+    
     db.commit()
-    db.refresh(access_request)
+    db.refresh(user)
 
-    return access_request
+    return user
 
 
-@app.post("/access/student", response_model=schemas.AccessRequestOut)
+@app.post("/access/student", response_model=schemas.UserProfile)
 def request_student_access(
     data: schemas.StudentAccessRequest,
     db: Session = Depends(get_db),
@@ -255,18 +249,15 @@ def request_student_access(
             detail="College does not exist. A Principal must register it first.",
         )
 
-    access_request = models.AccessRequest(
-        user_id=user.id,
-        role_requested="student",
-        college_name=data.college_name,
-        department_name=data.department_name,
-        status="pending",
-    )
-    db.add(access_request)
+    # Update user's college and department, set access status to pending
+    user.college_name = data.college_name
+    user.department_name = data.department_name
+    user.access_status = "pending"
+    
     db.commit()
-    db.refresh(access_request)
+    db.refresh(user)
 
-    return access_request
+    return user
 
 
 @app.post("/auth/login", response_model=schemas.AuthResponse)
