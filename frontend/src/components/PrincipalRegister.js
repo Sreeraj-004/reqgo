@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
 export default function PrincipalRegister() {
@@ -11,6 +12,22 @@ export default function PrincipalRegister() {
 
   const [departmentInput, setDepartmentInput] = useState("");
   const [departments, setDepartments] = useState([]);
+
+  const [existingColleges, setExistingColleges] = useState([]);
+  const [isDuplicate, setIsDuplicate] = useState(false);
+
+  useEffect(() => {
+    fetch("http://localhost:8000/colleges/")
+      .then((res) => res.json())
+      .then((data) => {
+        // store lowercase names for easy comparison
+        const names = data.map((c) => c.name.toLowerCase());
+        setExistingColleges(names);
+      })
+      .catch(() => {
+        console.error("Failed to fetch colleges");
+      });
+  }, []);
 
   const addDepartment = () => {
     const value = departmentInput.trim();
@@ -82,15 +99,26 @@ export default function PrincipalRegister() {
       </div>
 
       <form className="space-y-4" onSubmit={handleSubmit}>
-
+        {isDuplicate && (
+          <p className="text-sm text-red-600 mt-1">
+            This college is already registered.
+          </p>
+        )}
         <input
           type="text"
           placeholder="College name"
           value={collegeName}
-          onChange={(e) => setCollegeName(e.target.value)}
+          onChange={(e) => {
+            const value = e.target.value;
+            setCollegeName(value);
+
+            const duplicate = existingColleges.includes(value.trim().toLowerCase());
+            setIsDuplicate(duplicate);
+          }}
           className="w-full rounded-lg border border-gray-300 px-4 py-2.5
-                     focus:outline-none focus:ring-2 focus:ring-gray-400"
+                    focus:outline-none focus:ring-2 focus:ring-gray-400"
         />
+
 
         <div className="grid grid-cols-1 gap-3">
           <input
@@ -137,12 +165,16 @@ export default function PrincipalRegister() {
               >
                 {dept}
                 <button
-                  type="button"
-                  onClick={() => removeDepartment(dept)}
-                  className="text-white/70 hover:text-white"
+                  type="submit"
+                  disabled={isDuplicate}
+                  className="w-full rounded-lg py-2.5 font-medium
+                            bg-black text-white
+                            hover:opacity-90 transition
+                            disabled:opacity-40 disabled:cursor-not-allowed"
                 >
-                  ✕
+                  Register College
                 </button>
+
               </span>
             ))}
           </div>

@@ -1,24 +1,122 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 export default function HODRegister() {
-  const [step, setStep] = useState("verify"); // verify | request
   const [showModal, setShowModal] = useState(false);
 
-  const handleVerify = () => {
-    // TEMP: assume college exists
-    setStep("request");
+  const [colleges, setColleges] = useState([]);
+  const [filteredColleges, setFilteredColleges] = useState([]);
+  const [collegeInput, setCollegeInput] = useState("");
+  const [selectedCollege, setSelectedCollege] = useState(null);
+
+  const [departments, setDepartments] = useState([]);
+  const [filteredDepartments, setFilteredDepartments] = useState([]);
+  const [departmentInput, setDepartmentInput] = useState("");
+  const [selectedDepartment, setSelectedDepartment] = useState(null);
+
+  // 🔥 Fetch colleges
+  useEffect(() => {
+    fetch("http://localhost:8000/colleges/")
+      .then(res => res.json())
+      .then(data => setColleges(data))
+      .catch(() => console.error("Failed to load colleges"));
+  }, []);
+
+  // 🔍 College autocomplete
+  const handleCollegeChange = (e) => {
+    const value = e.target.value;
+    setCollegeInput(value);
+    setSelectedCollege(null);
+    setDepartmentInput("");
+    setSelectedDepartment(null);
+    setDepartments([]);
+    setFilteredDepartments([]);
+
+    if (!value.trim()) {
+      setFilteredColleges([]);
+      return;
+    }
+
+    setFilteredColleges(
+      colleges.filter(c =>
+        c.name.toLowerCase().includes(value.toLowerCase())
+      )
+    );
   };
 
-  const handleSendRequest = () => {
-    setShowModal(true);
+  const selectCollege = (college) => {
+    setCollegeInput(college.name);
+    setSelectedCollege(college);
+    setFilteredColleges([]);
+
+    const deptList = college.departments
+      ? college.departments.split(",").map(d => d.trim())
+      : [];
+
+    setDepartments(deptList);
   };
+
+  // 🔍 Department autocomplete
+  const handleDepartmentChange = (e) => {
+    const value = e.target.value;
+    setDepartmentInput(value);
+    setSelectedDepartment(null);
+
+    if (!value.trim()) {
+      setFilteredDepartments([]);
+      return;
+    }
+
+    setFilteredDepartments(
+      departments.filter(d =>
+        d.toLowerCase().includes(value.toLowerCase())
+      )
+    );
+  };
+
+  const selectDepartment = (dept) => {
+    setDepartmentInput(dept);
+    setSelectedDepartment(dept);
+    setFilteredDepartments([]);
+  };
+
+  const handleSendRequest = async () => {
+  if (!selectedCollege || !selectedDepartment) return;
+
+  const user = JSON.parse(localStorage.getItem("user"));
+  const token = localStorage.getItem("token");
+
+  try {
+    const res = await fetch("http://localhost:8000/access/hod", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        user_id: user.id,
+        college_name: selectedCollege.name,
+        department_name: selectedDepartment,
+      }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || "Request failed");
+    }
+
+    setShowModal(true);
+  } catch (err) {
+    console.error("HOD request failed:", err.message);
+    alert("Failed to send request");
+  }
+};
+
 
   return (
     <>
       {/* Main Card */}
       <div className="w-full max-w-md rounded-2xl bg-white/80 backdrop-blur-xl shadow-xl p-8">
-        
-        {/* Header */}
+
         <div className="text-center mb-6">
           <h1 className="text-2xl font-semibold">HOD Access</h1>
           <p className="text-sm text-gray-500 mt-1">
@@ -26,93 +124,128 @@ export default function HODRegister() {
           </p>
         </div>
 
-        {/* Form */}
-        <form className="space-y-4">
+        <form className="space-y-4 relative">
 
-          {/* College Name */}
+          {/* College */}
           <input
             type="text"
             placeholder="College name"
-            className="w-full rounded-lg border border-gray-300 px-4 py-2.5
-                       focus:outline-none focus:ring-2 focus:ring-gray-400"
+            value={collegeInput}
+            onChange={handleCollegeChange}
+            className="w-full rounded-lg border px-4 py-2.5"
           />
+
+          {filteredColleges.length > 0 && (
+            <div className="absolute z-10 w-full bg-white border rounded-lg shadow max-h-40 overflow-y-auto">
+              {filteredColleges.map(c => (
+                <div
+                  key={c.id}
+                  onClick={() => selectCollege(c)}
+                  className="px-4 py-2 hover:bg-gray-100 cursor-pointer"
+                >
+                  {c.name}
+                </div>
+              ))}
+            </div>
+          )}
 
           {/* Department */}
           <input
             type="text"
             placeholder="Department"
-            className="w-full rounded-lg border border-gray-300 px-4 py-2.5
-                       focus:outline-none focus:ring-2 focus:ring-gray-400"
+            value={departmentInput}
+            onChange={handleDepartmentChange}
+            disabled={!selectedCollege}
+            className="w-full rounded-lg border px-4 py-2.5 disabled:bg-gray-100"
           />
 
-          {/* Action Button */}
-          {step === "verify" ? (
-            <button
-              type="button"
-              onClick={handleVerify}
-              className="w-full rounded-lg py-2.5 font-medium
-                         bg-black text-white
-                         hover:opacity-90 transition"
-            >
-              Verify
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={handleSendRequest}
-              className="w-full rounded-lg py-2.5 font-medium
-                         bg-black text-white
-                         hover:opacity-90 transition"
-            >
-              Send Request
-            </button>
+          {filteredDepartments.length > 0 && (
+            <div className="w-full bg-white border rounded-lg shadow max-h-32 overflow-y-auto">
+              {filteredDepartments.map(dept => (
+                <div
+                  key={dept}
+                  onClick={() => selectDepartment(dept)}
+                  className="px-4 py-2 hover:bg-gray-100 cursor-pointer"
+                >
+                  {dept}
+                </div>
+              ))}
+            </div>
           )}
+
+          {/* Send */}
+          <button
+            type="button"
+            onClick={handleSendRequest}
+            disabled={!selectedCollege || !selectedDepartment}
+            className="w-full rounded-lg py-2.5 bg-black text-white
+                       hover:opacity-90 transition
+                       disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            Send Request
+          </button>
         </form>
       </div>
 
-      {/* MODAL */}
-      {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          
-          {/* Backdrop */}
-          <div
-            className="absolute inset-0 bg-black/50"
-            onClick={() => setShowModal(false)}
-          />
+      {/* Modal */}
+{showModal && (
+  <div className="fixed inset-0 z-50 flex items-center justify-center">
+    {/* Backdrop */}
+    <div
+      className="absolute inset-0 bg-black/50"
+      onClick={() => setShowModal(false)}
+    />
 
-          {/* Modal Card */}
-          <div className="relative z-10 w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
-            
-            <h2 className="text-lg font-semibold mb-3 text-center">
-              Request Sent
-            </h2>
+    {/* Modal Card */}
+    <div className="relative z-10 w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
+      <h2 className="text-lg font-semibold text-center mb-3">
+        Request Sent
+      </h2>
 
-            <p className="text-sm text-gray-600 text-center leading-relaxed">
-              Your request has been sent to the Principal.
-              <br />
-              You will be permitted once the Principal approves the request.
-              <br />
-              Please check back after approval.
-            </p>
+      <p className="text-sm text-gray-600 text-center mb-4">
+        Your request has been sent to the administration of
+        <br />
+        <span className="font-medium text-black">
+          {selectedCollege?.name}
+        </span>
+      </p>
 
-            <p className="text-sm text-gray-500 text-center mt-4">
-              For queries, contact:
-              <br />
-              <span className="font-medium text-black">
-                principal@example.com
-              </span>
-            </p>
+      <p className="text-sm text-gray-500 text-center mb-2">
+        For queries, contact:
+      </p>
 
-            <button
-              onClick={() => setShowModal(false)}
-              className="mt-6 w-full rounded-lg py-2.5 font-medium
-                         bg-black text-white hover:opacity-90 transition"
-            >
-              Close
-            </button>
-          </div>
+      {/* Principal */}
+      <div className="text-center mb-3">
+        <p className="font-medium text-black">
+          {selectedCollege?.principal_name}
+        </p>
+        <p className="text-sm text-gray-600">
+          {selectedCollege?.principal_email}
+        </p>
+      </div>
+
+      {/* Vice Principal (optional) */}
+      {selectedCollege?.vice_principal_email && (
+        <div className="text-center mb-3">
+          <p className="font-medium text-black">
+            {selectedCollege?.vice_principal_name}
+          </p>
+          <p className="text-sm text-gray-600">
+            {selectedCollege?.vice_principal_email}
+          </p>
         </div>
       )}
+
+      <button
+        onClick={() => setShowModal(false)}
+        className="mt-4 w-full rounded-lg py-2.5 bg-black text-white hover:opacity-90 transition"
+      >
+        Close
+      </button>
+    </div>
+  </div>
+)}
+
     </>
   );
 }

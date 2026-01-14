@@ -96,12 +96,16 @@ class CollegeOut(BaseModel):
     address: str
     city: str
     zip_code: str
-    departments: Optional[str] = None
-    principal_id: int
-    created_at: datetime
+    departments: Optional[str]
+
+    principal_name: str
+    principal_email: str
+
+    vice_principal_name: Optional[str]
+    vice_principal_email: Optional[str]
 
     class Config:
-        from_attributes = True
+        orm_mode = True
 
 
 class VicePrincipalAccessRequest(BaseModel):
@@ -132,4 +136,12 @@ class AccessRequestOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class CollegeUpdate(BaseModel):
+    name: str
+    address: str
+    city: str
+    zip_code: str
+    departments: List[str]
 

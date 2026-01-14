@@ -3,15 +3,46 @@ import { useState } from "react";
 export default function StudentRegister() {
   const [step, setStep] = useState("verify"); // verify | request
   const [showModal, setShowModal] = useState(false);
+  const [collegeInput, setCollegeInput] = useState("");
+  const [departmentInput, setDepartmentInput] = useState("");
 
   const handleVerify = () => {
     // TEMP: assume college exists
     setStep("request");
   };
 
-  const handleSendRequest = () => {
+  const handleSendRequest = async () => {
+  const user = JSON.parse(localStorage.getItem("user"));
+  const token = localStorage.getItem("token");
+
+  if (!collegeInput || !departmentInput) return;
+
+  try {
+    const res = await fetch("http://localhost:8000/access/student", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        user_id: user.id,
+        college_name: collegeInput,
+        department_name: departmentInput,
+      }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || "Request failed");
+    }
+
     setShowModal(true);
-  };
+  } catch (err) {
+    console.error("Student request failed:", err.message);
+    alert("Failed to send request");
+  }
+};
+
 
   return (
     <>
@@ -33,16 +64,20 @@ export default function StudentRegister() {
           <input
             type="text"
             placeholder="College name"
+            value={collegeInput}
+            onChange={(e) => setCollegeInput(e.target.value)}
             className="w-full rounded-lg border border-gray-300 px-4 py-2.5
-                       focus:outline-none focus:ring-2 focus:ring-gray-400"
+                      focus:outline-none focus:ring-2 focus:ring-gray-400"
           />
 
           {/* Department */}
           <input
             type="text"
             placeholder="Department"
+            value={departmentInput}
+            onChange={(e) => setDepartmentInput(e.target.value)}
             className="w-full rounded-lg border border-gray-300 px-4 py-2.5
-                       focus:outline-none focus:ring-2 focus:ring-gray-400"
+                      focus:outline-none focus:ring-2 focus:ring-gray-400"
           />
 
           {/* Action Button */}

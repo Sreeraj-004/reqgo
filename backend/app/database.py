@@ -1,28 +1,40 @@
-import os
-
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 
-# You can override this with an environment variable when running the app.
-# Example:
-#   DATABASE_URL=postgresql+psycopg2://user:password@localhost:5432/leave_db
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql+psycopg2://postgres:123@localhost:5432/Leave_request",
+# =========================
+# HARD-CODED DATABASE URL
+# =========================
+DATABASE_URL = "postgresql://postgres:123@localhost:5432/request_letter"
+
+# =========================
+# SQLALCHEMY ENGINE
+# =========================
+engine = create_engine(
+    DATABASE_URL,
+    echo=False,
+    future=True,
 )
 
-engine = create_engine(DATABASE_URL, echo=False, future=True)
+# =========================
+# SESSION
+# =========================
+SessionLocal = sessionmaker(
+    autocommit=False,
+    autoflush=False,
+    bind=engine,
+)
 
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
+# =========================
+# BASE
+# =========================
 Base = declarative_base()
 
-
+# =========================
+# FASTAPI DEPENDENCY
+# =========================
 def get_db():
     db = SessionLocal()
     try:
         yield db
     finally:
         db.close()
-
-

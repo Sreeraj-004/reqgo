@@ -2,7 +2,9 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import List, Optional
 
+
 import jwt
+from fastapi.security import OAuth2PasswordBearer
 from fastapi import Depends, FastAPI, HTTPException, status
 from passlib.context import CryptContext
 from sqlalchemy.orm import Session
@@ -29,6 +31,45 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
+
+def get_current_user(
+    token: str = Depends(oauth2_scheme),
+    db: Session = Depends(get_db),
+) -> models.User:
+    try:
+        payload = jwt.decode(
+            token,
+            JWT_SECRET_KEY,
+            algorithms=[JWT_ALGORITHM],
+        )
+        user_id = payload.get("sub")
+        if not user_id:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token",
+            )
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token expired",
+        )
+    except jwt.PyJWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token",
+        )
+
+    user = db.query(models.User).filter(models.User.id == int(user_id)).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found",
+        )
+
+    return user
+
 
 
 @app.on_event("startup")
@@ -136,6 +177,13 @@ def register_college(
     db.add(college)
     db.commit()
     db.refresh(college)
+
+    principal.college_name = college.name
+    principal.department_name = None
+    principal.access_status = "approved"
+
+    db.commit()
+    db.refresh(principal)
 
     return college
 
@@ -541,6 +589,38 @@ def get_leave_letter(leave_id: int, db: Session = Depends(get_db)):
     )
     return {"letter": body}
 
+@app.get("/colleges/", response_model=List[schemas.CollegeOut])
+def list_colleges(db: Session = Depends(get_db)):
+    colleges = db.query(models.College).all()
+    result = []
+
+    for c in colleges:
+        vp = (
+            db.query(models.User)
+            .filter(
+                models.User.role == "vice_principal",
+                models.User.college_name == c.name,
+                models.User.access_status == "approved",
+            )
+            .first()
+        )
+
+        result.append({
+            "id": c.id,
+            "name": c.name,
+            "address": c.address,
+            "city": c.city,
+            "zip_code": c.zip_code,
+            "departments": c.departments,
+            "principal_name": c.principal.name,
+            "principal_email": c.principal.email,
+            "vice_principal_name": vp.name if vp else None,
+            "vice_principal_email": vp.email if vp else None,
+        })
+
+    return result
+
+
 
 def render_leave_body(
     leave_type: str,
@@ -594,3 +674,88 @@ def render_leave_body(
     return content
 
 
+#edit - college - get
+@app.get("/colleges/by-principal/{principal_id}")
+def get_college_by_principal(
+    principal_id: int,
+    db: Session = Depends(get_db),
+):
+    college = (
+        db.query(models.College)
+        .filter(models.College.principal_id == principal_id)
+        .first()
+    )
+
+    if not college:
+        raise HTTPException(status_code=404, detail="College not found")
+
+    return college
+
+@app.put("/colleges/{college_id}")
+def update_college(
+    college_id: int,
+    data: schemas.CollegeUpdate,
+    db: Session = Depends(get_db),
+):
+    college = db.query(models.College).filter(models.College.id == college_id).first()
+
+    if not college:
+        raise HTTPException(status_code=404, detail="College not found")
+
+    college.name = data.name
+    college.address = data.address
+    college.city = data.city
+    college.zip_code = data.zip_code
+    college.departments = ",".join(data.departments)
+
+    db.commit()
+    db.refresh(college)
+
+    return college
+
+
+#list accounts
+@app.get("/access/pending")
+def list_pending_access_requests(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """
+    List all pending Vice Principal & HOD accounts
+    belonging to the same college as the current user.
+    """
+
+    # 🔐 Role guard
+    if current_user.role not in ["principal", "vice_principal"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not allowed to view access requests",
+        )
+
+    if not current_user.college_name:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="User is not associated with any college",
+        )
+
+    pending_users = (
+        db.query(models.User)
+        .filter(
+            models.User.access_status == "pending",
+            models.User.college_name == current_user.college_name,
+            models.User.role.in_(["vice_principal", "hod"]),
+        )
+        .all()
+    )
+
+    return [
+        {
+            "id": user.id,
+            "name": user.name,
+            "email": user.email,
+            "role": user.role,
+            "department": user.department_name,
+            "college": user.college_name,
+        }
+        for user in pending_users
+    ]
