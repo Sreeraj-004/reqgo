@@ -3,6 +3,7 @@ import Sidebar from "../components/Sidebar";
 import RequestsTable from "../components/RequestTable";
 import EditCollegeDetails from "../components/EditCollegeDetails";
 import NormalRequestsTable from "../components/NormalRequestsTable";
+import StudentRequestsTable from "../components/StudentRequestsTable";
 import { useNavigate } from "react-router-dom";
 
 export default function Dashboard() {
@@ -24,38 +25,56 @@ export default function Dashboard() {
         return (
           <div className="p-8">
             {/* Heading */}
-            <h1 className="text-4xl font-bold mb-4">Requests</h1>
+            <div className="flex items-center justify-between mb-4">
+              <h1 className="text-4xl font-bold">Requests</h1>
 
-            {/* Light Toggle Tabs */}
-            <div className="flex gap-6 border-b mb-6 text-sm font-medium">
-              <button
-                onClick={() => setRequestType("access")}
-                className={`pb-2 ${
-                  requestType === "access"
-                    ? "border-b-2 border-black text-black"
-                    : "text-gray-400 hover:text-black"
-                }`}
-              >
-                Access
-              </button>
-
-              <button
-                onClick={() => setRequestType("normal")}
-                className={`pb-2 ${
-                  requestType === "normal"
-                    ? "border-b-2 border-black text-black"
-                    : "text-gray-400 hover:text-black"
-                }`}
-              >
-                General
-              </button>
+              {user?.role === "student" && (
+                <button
+                  onClick={() => navigate("/NewRequest")}
+                  className="px-4 py-2 rounded-lg bg-black text-white text-sm font-medium hover:opacity-80 transition"
+                >
+                  New Request
+                </button>
+              )}
             </div>
 
-            {/* Tables */}
-            {requestType === "access" ? (
-              <RequestsTable />
-            ) : (
+            {/* STUDENT VIEW */}
+            {user?.role === "student" ? (
               <NormalRequestsTable />
+            ) : (
+              <>
+                {/* Toggle Tabs */}
+                <div className="flex gap-6 border-b mb-6 text-sm font-medium">
+                  <button
+                    onClick={() => setRequestType("access")}
+                    className={`pb-2 ${
+                      requestType === "access"
+                        ? "border-b-2 border-black text-black"
+                        : "text-gray-400 hover:text-black"
+                    }`}
+                  >
+                    Access
+                  </button>
+
+                  <button
+                    onClick={() => setRequestType("normal")}
+                    className={`pb-2 ${
+                      requestType === "normal"
+                        ? "border-b-2 border-black text-black"
+                        : "text-gray-400 hover:text-black"
+                    }`}
+                  >
+                    General
+                  </button>
+                </div>
+
+                {/* Tables */}
+                {requestType === "access" ? (
+                  <RequestsTable />
+                ) : (
+                  <NormalRequestsTable />
+                )}
+              </>
             )}
           </div>
         );

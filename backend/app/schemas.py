@@ -3,6 +3,9 @@ from typing import List, Optional
 
 from pydantic import BaseModel, EmailStr
 
+from pydantic import BaseModel
+from pydantic import ConfigDict
+
 
 class LoginRequest(BaseModel):
     email: EmailStr
@@ -28,6 +31,15 @@ class UserProfile(BaseModel):
     class Config:
         from_attributes = True
 
+class UserBasic(BaseModel):
+    id: int
+    name: str
+    department_name: Optional[str]
+
+    class Config:
+        orm_mode = True
+
+
 
 class AuthResponse(BaseModel):
     message: str
@@ -43,8 +55,12 @@ class LeaveBase(BaseModel):
     to_date: date
 
 
-class LeaveCreate(LeaveBase):
-    student_id: int
+class LeaveCreate(BaseModel):
+    leave_type: str
+    subject: str
+    reason: Optional[str]
+    from_date: date
+    to_date: date
 
 
 class LeaveUpdateStatus(BaseModel):
@@ -52,17 +68,20 @@ class LeaveUpdateStatus(BaseModel):
     approver_id: int  # the user who approves/rejects
 
 
-class LeaveOut(LeaveBase):
+class LeaveOut(BaseModel):
     id: int
-    student_id: int
-    approver_id: Optional[int] = None
-    status: str
-    body: Optional[str] = None
+    leave_type: str
+    subject: str
+    reason: Optional[str]
+    from_date: date
+    to_date: date
+    overall_status: str
     created_at: datetime
-    updated_at: datetime
+
+    student: UserBasic
 
     class Config:
-        from_attributes = True
+        orm_mode = True
 
 
 class MessageCreate(BaseModel):
@@ -100,13 +119,10 @@ class CollegeOut(BaseModel):
 
     principal_name: str
     principal_email: str
+    vice_principal_name: Optional[str] = None
+    vice_principal_email: Optional[str] = None
 
-    vice_principal_name: Optional[str]
-    vice_principal_email: Optional[str]
-
-    class Config:
-        orm_mode = True
-
+    model_config = ConfigDict(from_attributes=True)
 
 class VicePrincipalAccessRequest(BaseModel):
     user_id: int
@@ -145,3 +161,48 @@ class CollegeUpdate(BaseModel):
     zip_code: str
     departments: List[str]
 
+
+
+
+class CertificateApprovalOut(BaseModel):
+    approver_id: int
+    approver_role: str
+    status: str
+    remarks: Optional[str]
+    acted_at: Optional[datetime]
+
+    class Config:
+        orm_mode = True
+
+
+class CertificateRequestCreate(BaseModel):
+    certificates: List[str]
+    purpose: Optional[str] = None
+
+class CertificateRequestOut(BaseModel):
+    id: int
+    student_id: int
+    certificates: List[str]
+    purpose: Optional[str]
+    overall_status: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True   # ✅ Pydantic v2 fix
+
+
+class UnifiedRequestOut(BaseModel):
+    id: int
+    sender: str
+    type: str
+    subject: str
+    created_at: datetime
+    view_url: str
+
+    class Config:
+        from_attributes = True
+
+
+class DecisionSchema(BaseModel):
+    status: str  # approved | rejected
+    remarks: Optional[str] = None

@@ -7,9 +7,18 @@ import jwt
 from fastapi.security import OAuth2PasswordBearer
 from fastapi import Depends, FastAPI, HTTPException, status
 from passlib.context import CryptContext
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from . import models, schemas
+
+from app.models import (
+    LeaveRequest,
+    LeaveApproval,
+    CertificateRequest,
+    CertificateApproval,
+    CustomLetterRequest,
+)
 from .database import Base, engine, get_db
 
 from fastapi.middleware.cors import CORSMiddleware
@@ -185,7 +194,19 @@ def register_college(
     db.commit()
     db.refresh(principal)
 
-    return college
+    return schemas.CollegeOut(
+        id=college.id,
+        name=college.name,
+        address=college.address,
+        city=college.city,
+        zip_code=college.zip_code,
+        departments=college.departments,
+        principal_name=principal.name,
+        principal_email=principal.email,
+        vice_principal_name=None,
+        vice_principal_email=None,
+    )
+
 
 
 @app.post("/access/vice-principal", response_model=schemas.UserProfile)
@@ -326,36 +347,29 @@ def login(credentials: schemas.LoginRequest, db: Session = Depends(get_db)):
     )
 
 
-@app.post("/leaves/", response_model=schemas.LeaveOut, status_code=status.HTTP_201_CREATED)
-def create_leave_request(leave_in: schemas.LeaveCreate, db: Session = Depends(get_db)):
-    student = db.query(models.User).filter(models.User.id == leave_in.student_id).first()
-    if not student:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Student user not found",
-        )
-
-    body = render_leave_body(
-        leave_type=leave_in.leave_type,
-        student_name=student.name,
-        reason=leave_in.reason,
-        from_date=str(leave_in.from_date),
-        to_date=str(leave_in.to_date),
-    )
+@app.post("/leaves/", response_model=schemas.LeaveOut, status_code=201)
+def create_leave_request(
+    leave_in: schemas.LeaveCreate,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if current_user.role != "student":
+        raise HTTPException(status_code=403, detail="Only students can request leave")
 
     leave = models.LeaveRequest(
-        student_id=leave_in.student_id,
+        student_id=current_user.id,
         leave_type=leave_in.leave_type,
         subject=leave_in.subject,
         reason=leave_in.reason,
         from_date=leave_in.from_date,
         to_date=leave_in.to_date,
-        status="pending",
-        body=body,
+        overall_status="in_progress",
     )
+
     db.add(leave)
     db.commit()
     db.refresh(leave)
+
     return leave
 
 
@@ -674,6 +688,116 @@ def render_leave_body(
     return content
 
 
+@app.post("/certificate-requests", response_model=schemas.CertificateRequestOut, status_code=201)
+def create_certificate_request(
+    data: schemas.CertificateRequestCreate,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if current_user.role != "student":
+        raise HTTPException(403, "Only students can request certificates")
+
+    if not data.certificates or not any(c.strip() for c in data.certificates):
+        raise HTTPException(400, "At least one certificate is required")
+
+    request = models.CertificateRequest(
+        student_id=current_user.id,
+        certificates=",".join(data.certificates),
+        purpose=data.purpose,
+        overall_status="in_progress",
+    )
+
+    db.add(request)
+    db.commit()
+    db.refresh(request)
+
+    hod = (
+        db.query(models.User)
+        .filter(
+            models.User.role == "hod",
+            models.User.college_name == current_user.college_name,
+            models.User.department_name == current_user.department_name,
+            models.User.access_status == "approved",
+        )
+        .first()
+    )
+
+    if not hod:
+        raise HTTPException(400, "HOD not found for your department")
+
+    approval = models.CertificateApproval(
+        request_id=request.id,
+        approver_id=hod.id,
+        approver_role="hod",
+        status="pending",
+    )
+
+    db.add(approval)
+    db.commit()
+
+    # ✅ MANUAL RESPONSE (THIS IS THE KEY)
+    return schemas.CertificateRequestOut(
+        id=request.id,
+        student_id=request.student_id,
+        certificates=request.certificates.split(","),
+        purpose=request.purpose,
+        overall_status=request.overall_status,
+        created_at=request.created_at,
+    )
+
+@app.post("/certificate-requests/{request_id}/approve")
+def approve_certificate_request(
+    request_id: int,
+    remarks: str | None = None,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    approval = (
+        db.query(models.CertificateApproval)
+        .filter(
+            models.CertificateApproval.request_id == request_id,
+            models.CertificateApproval.approver_id == current_user.id,
+            models.CertificateApproval.status == "pending",
+        )
+        .first()
+    )
+
+    if not approval:
+        raise HTTPException(404, "No pending approval found")
+
+    approval.status = "approved"
+    approval.remarks = remarks
+    approval.acted_at = datetime.utcnow()
+
+    # Forward logic
+    if approval.approver_role == "hod":
+        principal = (
+            db.query(models.User)
+            .filter(
+                models.User.college_name == current_user.college_name,
+                models.User.role.in_(["principal", "vice_principal"]),
+            )
+            .first()
+        )
+
+        if principal:
+            db.add(
+                models.CertificateApproval(
+                    request_id=request_id,
+                    approver_id=principal.id,
+                    approver_role=principal.role,
+                    status="pending",
+                )
+            )
+
+    else:
+        # Final approval
+        approval.request.overall_status = "approved"
+
+    db.commit()
+    return {"message": "Certificate request approved"}
+
+
 #edit - college - get
 @app.get("/colleges/by-principal/{principal_id}")
 def get_college_by_principal(
@@ -714,48 +838,328 @@ def update_college(
     return college
 
 
-#list accounts
-@app.get("/access/pending")
-def list_pending_access_requests(
-    db: Session = Depends(get_db),
+
+# accept and reject access requests
+@app.get("/access/pending", response_model=List[schemas.UserProfile])
+def get_pending_access_requests(
     current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
-    """
-    List all pending Vice Principal & HOD accounts
-    belonging to the same college as the current user.
-    """
-
-    # 🔐 Role guard
-    if current_user.role not in ["principal", "vice_principal"]:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You are not allowed to view access requests",
-        )
-
+    print(
+    "DEBUG ROLE:", current_user.role,
+    "COLLEGE:", current_user.college_name,
+    "STATUS:", current_user.access_status
+)
     if not current_user.college_name:
+        return []
+
+    base_query = db.query(models.User).filter(
+        models.User.college_name == current_user.college_name,
+        models.User.access_status == "pending",
+    )
+
+    role_map = {
+        "principal": "vice_principal",
+        "vice_principal": "hod",
+        "hod": "student",
+    }
+
+    target_role = role_map.get(current_user.role)
+
+    if not target_role:
+        return []
+
+    users = base_query.filter(models.User.role == target_role).all()
+    return users
+
+@app.post("/access/approve/{user_id}")
+def approve_access_request(
+    user_id: int,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if user.id == current_user.id:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="User is not associated with any college",
+            status_code=403,
+            detail="You cannot approve yourself"
         )
 
-    pending_users = (
-        db.query(models.User)
-        .filter(
-            models.User.access_status == "pending",
-            models.User.college_name == current_user.college_name,
-            models.User.role.in_(["vice_principal", "hod"]),
+    if user.college_name != current_user.college_name:
+        raise HTTPException(
+            status_code=403,
+            detail="College mismatch"
         )
+
+    if user.access_status != "pending":
+        raise HTTPException(
+            status_code=400,
+            detail="Request is not pending"
+        )
+
+    user.access_status = "approved"
+    db.commit()
+
+    return {"message": "Access approved"}
+
+
+@app.post("/access/reject/{user_id}")
+def reject_access_request(
+    user_id: int,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if user.id == current_user.id:
+        raise HTTPException(
+            status_code=403,
+            detail="You cannot reject yourself"
+        )
+
+    if user.college_name != current_user.college_name:
+        raise HTTPException(
+            status_code=403,
+            detail="College mismatch"
+        )
+
+    if user.access_status != "pending":
+        raise HTTPException(
+            status_code=400,
+            detail="Request is not pending"
+        )
+
+    user.access_status = "rejected"
+    user.college_name = None
+    user.department_name = None
+
+    db.commit()
+
+    return {"message": "Access rejected"}
+
+
+@app.get("/requests", response_model=List[schemas.UnifiedRequestOut])
+def get_all_requests(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    results = []
+
+    # -------------------------
+    # LEAVE REQUESTS
+    # -------------------------
+    leaves = (
+        db.query(models.LeaveRequest)
+        .join(models.User, models.LeaveRequest.student_id == models.User.id)
         .all()
     )
 
-    return [
-        {
-            "id": user.id,
-            "name": user.name,
-            "email": user.email,
-            "role": user.role,
-            "department": user.department_name,
-            "college": user.college_name,
-        }
-        for user in pending_users
-    ]
+    for leave in leaves:
+        results.append({
+            "id": leave.id,
+            "sender": leave.student.name,
+            "type": "Leave",
+            "subject": leave.subject,
+            "created_at": leave.created_at,
+            "view_url": f"/leaves/{leave.id}",
+        })
+
+    # -------------------------
+    # CERTIFICATE REQUESTS
+    # -------------------------
+    certificates = (
+        db.query(models.CertificateRequest)
+        .join(models.User, models.CertificateRequest.student_id == models.User.id)
+        .all()
+    )
+
+    for cert in certificates:
+        results.append({
+            "id": cert.id,
+            "sender": cert.student.name,
+            "type": "Certificate",
+            "subject": "Certificate Request",
+            "created_at": cert.created_at,
+            "view_url": f"/certificate-requests/{cert.id}",
+        })
+
+    # -------------------------
+    # CUSTOM LETTERS
+    # -------------------------
+    custom_letters = (
+        db.query(models.CustomLetterRequest)
+        .join(models.User, models.CustomLetterRequest.student_id == models.User.id)
+        .all()
+    )
+
+    for letter in custom_letters:
+        results.append({
+            "id": letter.id,
+            "sender": letter.student.name,
+            "type": "Custom Letter",
+            "subject": f"Letter to {letter.to_role}",
+            "created_at": letter.created_at,
+            "view_url": f"/custom-letters/{letter.id}",
+        })
+
+    # -------------------------
+    # SORT BY TIME DESC
+    # -------------------------
+    results.sort(key=lambda x: x["created_at"], reverse=True)
+
+    return results
+
+@app.get("/certificate-requests/{request_id}")
+def get_certificate_request(
+    request_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    request = (
+        db.query(models.CertificateRequest)
+        .filter(models.CertificateRequest.id == request_id)
+        .first()
+    )
+
+    if not request:
+        raise HTTPException(status_code=404, detail="Certificate request not found")
+
+    return {
+        "id": request.id,
+        "type": "Certificate",
+        "student": {
+            "name": request.student.name,
+            "department": request.student.department_name,
+        },
+        "certificates": request.certificates.split(","),
+        "purpose": request.purpose,
+        "status": request.overall_status,
+        "created_at": request.created_at,
+        "approvals": [
+            {
+                "role": a.approver_role,
+                "status": a.status,
+                "remarks": a.remarks,
+                "acted_at": a.acted_at,
+            }
+            for a in request.approvals
+        ],
+    }
+
+@app.get("/certificate-requests/{request_id}")
+def get_certificate_request(
+    request_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    request = (
+        db.query(models.CertificateRequest)
+        .filter(models.CertificateRequest.id == request_id)
+        .first()
+    )
+
+    if not request:
+        raise HTTPException(status_code=404, detail="Certificate request not found")
+
+    # Authorization: student can view own request, approvers can view all
+    if current_user.role == "student" and request.student_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    return {
+        "id": request.id,
+        "type": "Certificate",
+        "student": {
+            "name": request.student.name,
+            "department": request.student.department_name,
+        },
+        "certificates": request.certificates.split(","),
+        "purpose": request.purpose,
+        "status": request.overall_status,
+        "created_at": request.created_at,
+        "approvals": [
+            {
+                "role": a.approver_role,
+                "status": a.status,
+                "remarks": a.remarks,
+                "acted_at": a.acted_at,
+            }
+            for a in request.approvals
+        ],
+    }
+
+class DecisionSchema(BaseModel):
+    status: str  # approved | rejected
+    remarks: Optional[str] = None
+
+
+@app.post("/leaves/{leave_id}/decision")
+def decide_leave_request(
+    leave_id: int,
+    payload: DecisionSchema,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    if current_user.role not in ["hod", "vice_principal", "principal"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    leave = db.query(LeaveRequest).filter_by(id=leave_id).first()
+    if not leave:
+        raise HTTPException(status_code=404, detail="Leave request not found")
+
+    if leave.overall_status != "in_progress":
+        raise HTTPException(status_code=400, detail="Request already decided")
+
+    approval = LeaveApproval(
+        leave_id=leave.id,
+        approver_id=current_user.id,
+        approver_role=current_user.role,
+        status=payload.status,
+        remarks=payload.remarks,
+        acted_at=datetime.utcnow(),
+    )
+
+    leave.overall_status = payload.status
+
+    db.add(approval)
+    db.commit()
+
+    return {"message": f"Leave request {payload.status}"}
+
+@app.post("/certificate-requests/{request_id}/decision")
+def decide_certificate_request(
+    request_id: int,
+    payload: DecisionSchema,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    if current_user.role not in ["hod", "vice_principal", "principal"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    req = db.query(CertificateRequest).filter_by(id=request_id).first()
+    if not req:
+        raise HTTPException(status_code=404, detail="Certificate request not found")
+
+    if req.overall_status != "in_progress":
+        raise HTTPException(status_code=400, detail="Request already decided")
+
+    approval = CertificateApproval(
+        request_id=req.id,
+        approver_id=current_user.id,
+        approver_role=current_user.role,
+        status=payload.status,
+        remarks=payload.remarks,
+        acted_at=datetime.utcnow(),
+    )
+
+    req.overall_status = payload.status
+
+    db.add(approval)
+    db.commit()
+
+    return {"message": f"Certificate request {payload.status}"}
+

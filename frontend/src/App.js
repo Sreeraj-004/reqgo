@@ -6,6 +6,7 @@ import PrincipalDashboard from "./pages/PrincipalDashboard";
 import StudentDashboard from "./pages/StudentDashboard";
 import NewRequestLetter from "./pages/RequestLetter";
 import Dashboard from "./pages/Dashboard";
+import ViewRequest from "./pages/ViewRequest";
 
 function App() {
   const isLoggedIn = false; // fake auth for now
@@ -31,6 +32,10 @@ function App() {
         <Route path="/student/dashboard" element={<StudentDashboard />} />
         <Route path="/principal/dashboard" element={<PrincipalDashboard />} />
         <Route path="/NewRequest" element={<NewRequestLetter />} />
+        <Route path="/leaves/:id" element={<ViewRequest />} />
+        <Route path="/certificate-requests/:id" element={<ViewRequest />} />
+        <Route path="/custom-letters/:id" element={<ViewRequest />} />
+
 
 
       </Routes>

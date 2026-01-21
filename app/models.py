@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Date, DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import Column, Date, DateTime, ForeignKey, Integer, String, Text, func, JSON
 from sqlalchemy.orm import relationship
 
 from .database import Base
@@ -22,6 +22,16 @@ class User(Base):
         "LeaveRequest",
         back_populates="approver",
         foreign_keys="LeaveRequest.approver_id",
+    )
+    certificate_requests = relationship(
+    "CertificateRequest",
+    back_populates="student",
+    cascade="all, delete-orphan",
+    )
+    custom_letters = relationship(
+        "CustomLetterRequest",
+        back_populates="student",
+        cascade="all, delete-orphan",
     )
 
 
@@ -98,6 +108,73 @@ class LeaveMessage(Base):
     leave = relationship("LeaveRequest", backref="messages")
     sender = relationship("User")
 
+class CertificateRequest(Base):
+    __tablename__ = "certificate_requests"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    student_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+
+    # Comma separated or JSON string of certificate names
+    certificates = Column(Text, nullable=False)
+
+    purpose = Column(Text, nullable=True)
+
+    # draft → in_progress → approved → rejected
+    overall_status = Column(
+        String(20),
+        nullable=False,
+        default="in_progress",
+    )
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    # relationships
+    student = relationship("User")
+    approvals = relationship(
+        "CertificateApproval",
+        back_populates="request",
+        cascade="all, delete-orphan",
+    )
+
+
+class CertificateApproval(Base):
+    __tablename__ = "certificate_approvals"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    request_id = Column(
+        Integer,
+        ForeignKey("certificate_requests.id"),
+        nullable=False,
+    )
+
+    approver_id = Column(
+        Integer,
+        ForeignKey("users.id"),
+        nullable=False,
+    )
+
+    # hod / vice_principal / principal
+    approver_role = Column(String(50), nullable=False)
+
+    # pending / approved / rejected / forwarded
+    status = Column(String(20), nullable=False, default="pending")
+
+    remarks = Column(Text, nullable=True)
+
+    acted_at = Column(DateTime(timezone=True), nullable=True)
+
+    # relationships
+    request = relationship("CertificateRequest", back_populates="approvals")
+    approver = relationship("User")
+
+
 
 class departments(Base):
     """Department model. Each department belongs to a college."""
@@ -138,3 +215,44 @@ class AccessRequest(Base):
     department = relationship("departments", back_populates="access_requests")
 
 
+class CustomLetterRequest(Base):
+    __tablename__ = "custom_letter_requests"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    student_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+
+    # principal / vice_principal / hod
+    to_role = Column(String(50), nullable=False)
+
+    content = Column(Text, nullable=False)
+
+    # draft → submitted → approved → rejected
+    status = Column(
+        String(20),
+        nullable=False,
+        default="draft",
+    )
+
+    created_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+    updated_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    # relationship
+    student = relationship(
+        "User",
+        back_populates="custom_letters",
+    )

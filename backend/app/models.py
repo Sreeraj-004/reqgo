@@ -3,7 +3,6 @@ from sqlalchemy.orm import relationship
 
 from .database import Base
 
-
 class User(Base):
     __tablename__ = "users"
 
@@ -11,24 +10,44 @@ class User(Base):
     name = Column(String(100), nullable=False)
     email = Column(String(255), unique=True, index=True, nullable=False)
     hashed_password = Column(String(255), nullable=False)
-    role = Column(String(50), nullable=False, default="student")  # student, faculty, admin
-    
-    # College and department assignment
+    role = Column(String(50), nullable=False, default="student")
+
     college_name = Column(String(255), nullable=True)
     department_name = Column(String(255), nullable=True)
-    access_status = Column(String(20), nullable=True, default="pending")  # pending/approved/rejected
+    access_status = Column(String(20), nullable=False, default="pending")
+
+    # ======================
+    # LEAVE RELATIONSHIPS
+    # ======================
 
     leave_requests = relationship(
         "LeaveRequest",
         back_populates="student",
         foreign_keys="LeaveRequest.student_id",
-    )
-    approvals = relationship(
-        "LeaveRequest",
-        back_populates="approver",
-        foreign_keys="LeaveRequest.approver_id",
+        cascade="all, delete-orphan",
     )
 
+    leave_approvals = relationship(
+        "LeaveApproval",
+        back_populates="approver",
+        foreign_keys="LeaveApproval.approver_id",
+    )
+
+    # ======================
+    # CERTIFICATE RELATIONSHIPS ✅ ADD THIS
+    # ======================
+
+    certificate_requests = relationship(
+        "CertificateRequest",
+        back_populates="student",
+        cascade="all, delete-orphan",
+    )
+
+    certificate_approvals = relationship(
+        "CertificateApproval",
+        back_populates="approver",
+        foreign_keys="CertificateApproval.approver_id",
+    )
 
 class College(Base):
     """A simple college model. One principal owns a college."""
@@ -52,10 +71,10 @@ class LeaveRequest(Base):
     __tablename__ = "leave_requests"
 
     id = Column(Integer, primary_key=True, index=True)
-    student_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    approver_id = Column(Integer, ForeignKey("users.id"), nullable=True)
 
-    leave_type = Column(String(50), nullable=False)  # emergency, medical, personal, wedding
+    student_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+
+    leave_type = Column(String(50), nullable=False)
     subject = Column(String(255), nullable=False)
     body = Column(Text, nullable=True)
     reason = Column(Text, nullable=True)
@@ -63,12 +82,11 @@ class LeaveRequest(Base):
     from_date = Column(Date, nullable=False)
     to_date = Column(Date, nullable=False)
 
-    # Simple overall status for the request
-    # pending -> approved / rejected
-    status = Column(
+    # draft → in_progress → approved / rejected
+    overall_status = Column(
         String(20),
         nullable=False,
-        default="pending",
+        default="in_progress",
     )
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -78,15 +96,47 @@ class LeaveRequest(Base):
         onupdate=func.now(),
     )
 
+    # relationships
     student = relationship(
         "User",
         foreign_keys=[student_id],
         back_populates="leave_requests",
     )
+
+    approvals = relationship(
+        "LeaveApproval",
+        back_populates="leave",
+        cascade="all, delete-orphan",
+    )
+
+class LeaveApproval(Base):
+    __tablename__ = "leave_approvals"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    leave_id = Column(Integer, ForeignKey("leave_requests.id"), nullable=False)
+    approver_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+
+    # hod / vice_principal / principal
+    approver_role = Column(String(50), nullable=False)
+
+    # pending / approved / rejected / forwarded
+    status = Column(String(20), nullable=False, default="pending")
+
+    remarks = Column(Text, nullable=True)
+
+    acted_at = Column(DateTime(timezone=True), nullable=True)
+
+    # relationships
+    leave = relationship(
+        "LeaveRequest",
+        back_populates="approvals",
+    )
+
     approver = relationship(
         "User",
         foreign_keys=[approver_id],
-        back_populates="approvals",
+        back_populates="leave_approvals",
     )
 
 
@@ -104,4 +154,116 @@ class LeaveMessage(Base):
 
 
 
+class CertificateRequest(Base):
+    __tablename__ = "certificate_requests"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    student_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+
+    # Comma-separated certificate names
+    certificates = Column(Text, nullable=False)
+
+    purpose = Column(Text, nullable=True)
+
+    # in_progress → approved → rejected
+    overall_status = Column(
+        String(20),
+        nullable=False,
+        default="in_progress",
+    )
+
+    created_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+    )
+
+    updated_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    # relationships
+    student = relationship("User", back_populates="certificate_requests")
+
+    approvals = relationship(
+        "CertificateApproval",
+        back_populates="request",
+        cascade="all, delete-orphan",
+        order_by="CertificateApproval.id",
+    )
+
+class CertificateApproval(Base):
+    __tablename__ = "certificate_approvals"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    request_id = Column(
+        Integer,
+        ForeignKey("certificate_requests.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+
+    approver_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+
+    # hod / vice_principal / principal
+    approver_role = Column(String(50), nullable=False)
+
+    # pending / approved / rejected
+    status = Column(String(20), nullable=False, default="pending")
+
+    remarks = Column(Text, nullable=True)
+
+    acted_at = Column(DateTime(timezone=True), nullable=True)
+
+    # relationships
+    request = relationship("CertificateRequest", back_populates="approvals")
+
+    approver = relationship("User")
+
+class CustomLetterRequest(Base):
+    __tablename__ = "custom_letter_requests"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    student_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    to_role = Column(String(50), nullable=False)  # principal / vice_principal / hod
+    content = Column(Text, nullable=False)
+
+    status = Column(
+        String(20),
+        nullable=False,
+        default="draft",
+    )
+
+    created_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+    updated_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    # relationship
+    student = relationship("User", backref="custom_letter_requests")
 

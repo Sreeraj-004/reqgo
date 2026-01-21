@@ -117,13 +117,25 @@ export default function EditCollegeDetails() {
             {departments.map((dept) => (
               <span
                 key={dept}
-                className="bg-black text-white px-3 py-1 rounded-full text-sm"
+                className="
+                  flex items-center gap-2
+                  bg-black text-white
+                  px-3 py-1
+                  rounded-full
+                  text-sm
+                "
               >
                 {dept}
+
                 <button
                   type="button"
                   onClick={() => removeDepartment(dept)}
-                  className="ml-2 text-white/70"
+                  className="
+                    text-white/70
+                    hover:text-white
+                    leading-none
+                  "
+                  aria-label={`Remove ${dept}`}
                 >
                   ✕
                 </button>
@@ -135,7 +147,8 @@ export default function EditCollegeDetails() {
             <input
               value={departmentInput}
               onChange={(e) => setDepartmentInput(e.target.value)}
-              className="flex-1 px-4 py-2.5"
+              className="flex-1 px-4 py-2.5 outline-none"
+              placeholder="Add department"
             />
             <button
               type="button"
@@ -146,6 +159,7 @@ export default function EditCollegeDetails() {
             </button>
           </div>
         </div>
+
 
         <button
           type="submit"

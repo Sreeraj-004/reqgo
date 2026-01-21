@@ -1,5 +1,4 @@
-import { useState } from "react";
-import { useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
 export default function PrincipalRegister() {
@@ -20,13 +19,9 @@ export default function PrincipalRegister() {
     fetch("http://localhost:8000/colleges/")
       .then((res) => res.json())
       .then((data) => {
-        // store lowercase names for easy comparison
-        const names = data.map((c) => c.name.toLowerCase());
-        setExistingColleges(names);
+        setExistingColleges(data.map((c) => c.name.toLowerCase()));
       })
-      .catch(() => {
-        console.error("Failed to fetch colleges");
-      });
+      .catch(() => console.error("Failed to fetch colleges"));
   }, []);
 
   const addDepartment = () => {
@@ -36,7 +31,6 @@ export default function PrincipalRegister() {
     if (!departments.includes(value)) {
       setDepartments([...departments, value]);
     }
-
     setDepartmentInput("");
   };
 
@@ -77,10 +71,7 @@ export default function PrincipalRegister() {
       });
 
       const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.detail || "College registration failed");
-      }
+      if (!res.ok) throw new Error(data.detail);
 
       navigate("/dashboard");
     } catch (err) {
@@ -89,122 +80,80 @@ export default function PrincipalRegister() {
   };
 
   return (
-    <div className="w-full max-w-md rounded-2xl bg-white/80 backdrop-blur-xl shadow-xl p-8">
-      
+    <div className="w-full max-w-md rounded-2xl bg-white shadow-xl p-8">
       <div className="text-center mb-6">
         <h1 className="text-2xl font-semibold">College Details</h1>
-        <p className="text-sm text-gray-500 mt-1">
-          Register your institution
-        </p>
+        <p className="text-sm text-gray-500">Register your institution</p>
       </div>
 
       <form className="space-y-4" onSubmit={handleSubmit}>
-        {isDuplicate && (
-          <p className="text-sm text-red-600 mt-1">
-            This college is already registered.
-          </p>
-        )}
         <input
-          type="text"
           placeholder="College name"
           value={collegeName}
           onChange={(e) => {
             const value = e.target.value;
             setCollegeName(value);
-
-            const duplicate = existingColleges.includes(value.trim().toLowerCase());
-            setIsDuplicate(duplicate);
+            setIsDuplicate(existingColleges.includes(value.trim().toLowerCase()));
           }}
-          className="w-full rounded-lg border border-gray-300 px-4 py-2.5
-                    focus:outline-none focus:ring-2 focus:ring-gray-400"
+          className="w-full rounded-lg border px-4 py-2.5"
         />
 
+        <input
+          placeholder="Address"
+          value={address}
+          onChange={(e) => setAddress(e.target.value)}
+          className="w-full rounded-lg border px-4 py-2.5"
+        />
 
-        <div className="grid grid-cols-1 gap-3">
+        <div className="grid grid-cols-2 gap-3">
           <input
-            type="text"
-            placeholder="Address"
-            value={address}
-            onChange={(e) => setAddress(e.target.value)}
-            className="w-full rounded-lg border border-gray-300 px-4 py-2.5
-                       focus:outline-none focus:ring-2 focus:ring-gray-400"
+            placeholder="City"
+            value={city}
+            onChange={(e) => setCity(e.target.value)}
+            className="rounded-lg border px-4 py-2.5"
           />
-
-          <div className="grid grid-cols-2 gap-3">
-            <input
-              type="text"
-              placeholder="City"
-              value={city}
-              onChange={(e) => setCity(e.target.value)}
-              className="rounded-lg border border-gray-300 px-4 py-2.5
-                         focus:outline-none focus:ring-2 focus:ring-gray-400"
-            />
-
-            <input
-              type="text"
-              placeholder="Zip code"
-              value={zipCode}
-              onChange={(e) => setZipCode(e.target.value)}
-              className="rounded-lg border border-gray-300 px-4 py-2.5
-                         focus:outline-none focus:ring-2 focus:ring-gray-400"
-            />
-          </div>
+          <input
+            placeholder="Zip code"
+            value={zipCode}
+            onChange={(e) => setZipCode(e.target.value)}
+            className="rounded-lg border px-4 py-2.5"
+          />
         </div>
 
+        {/* Departments */}
         <div>
-          <p className="text-sm font-medium text-gray-700 mb-2">
-            Departments
-          </p>
+          <p className="text-sm font-medium mb-2">Departments</p>
 
           <div className="flex flex-wrap gap-2 mb-2">
             {departments.map((dept) => (
               <span
                 key={dept}
-                className="flex items-center gap-2 px-3 py-1
-                           rounded-full bg-black text-white text-sm"
+                className="flex items-center gap-2 bg-black text-white px-3 py-1 rounded-full text-sm"
               >
                 {dept}
                 <button
-                  type="submit"
-                  disabled={isDuplicate}
-                  className="w-full rounded-lg py-2.5 font-medium
-                            bg-black text-white
-                            hover:opacity-90 transition
-                            disabled:opacity-40 disabled:cursor-not-allowed"
+                  type="button"
+                  onClick={() => removeDepartment(dept)}
+                  className="text-white/70 hover:text-white"
                 >
-                  Register College
+                  ✕
                 </button>
-
               </span>
             ))}
           </div>
 
-          <div
-            className="
-              flex items-center rounded-lg border border-gray-300 overflow-hidden
-              focus-within:ring-2 focus-within:ring-gray-400
-            "
-          >
+          <div className="flex border rounded-lg overflow-hidden">
             <input
-              type="text"
-              placeholder="Type department"
+              placeholder="Add department"
               value={departmentInput}
               onChange={(e) => setDepartmentInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              className="flex-1 px-4 py-2.5 focus:outline-none"
+              className="flex-1 px-4 py-2.5"
             />
-
             <button
               type="button"
               onClick={addDepartment}
-              disabled={!departmentInput.trim()}
-              className="
-                h-full px-4
-                text-white bg-black py-2.5 
-                hover:-rotate-90
-                disabled:opacity-40 disabled:bg-white disabled:text-gray-700 disabled:cursor-not-allowed
-                transition
-              "
+              className="bg-black text-white px-4"
             >
               ➜
             </button>
@@ -213,9 +162,8 @@ export default function PrincipalRegister() {
 
         <button
           type="submit"
-          className="w-full rounded-lg py-2.5 font-medium
-                     bg-black text-white
-                     hover:opacity-90 transition"
+          disabled={isDuplicate}
+          className="w-full rounded-lg py-2.5 bg-black text-white disabled:opacity-40"
         >
           Register College
         </button>
