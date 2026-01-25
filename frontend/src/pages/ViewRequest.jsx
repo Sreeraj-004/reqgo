@@ -10,6 +10,7 @@ export default function ViewRequest() {
   const { id } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
+
   const token = localStorage.getItem("token");
   const user = JSON.parse(localStorage.getItem("user"));
 
@@ -20,6 +21,43 @@ export default function ViewRequest() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [showShare, setShowShare] = useState(false);
+  const [customContent, setCustomContent] = useState("");
+  
+  const handleSendMessage = () => {
+    if (!data) return;
+
+    let receiverId = null;
+
+    if (user.role === "student") {
+      if (requestType === "leave") {
+        receiverId = data.hodId;
+      }
+
+      else if (requestType === "certificate") {
+        if (data.status === "in_progress") {
+          receiverId = data.hodId;
+        } else if (data.status === "forwarded") {
+          receiverId = data.principalId;
+        }
+      }
+
+      else if (requestType === "custom") {
+        receiverId = data.toUserId;
+      }
+    } else {
+      receiverId = data.studentId;
+    }
+
+    if (!receiverId) {
+      alert("Unable to determine message recipient");
+      return;
+    }
+
+    navigate(
+      `/messages/new?to=${receiverId}`
+    );
+  };
+
 
   /* --------------------------------------------------
      Detect request type from URL
@@ -44,11 +82,9 @@ export default function ViewRequest() {
 
     if (requestType === "leave") {
       apiUrl = `http://localhost:8000/leaves/${id}`;
-    }
-    if (requestType === "certificate") {
+    } else if (requestType === "certificate") {
       apiUrl = `http://localhost:8000/certificate-requests/${id}`;
-    }
-    if (requestType === "custom") {
+    } else if (requestType === "custom") {
       apiUrl = `http://localhost:8000/custom-letters/${id}`;
     }
 
@@ -68,91 +104,163 @@ export default function ViewRequest() {
         if (requestType === "leave") {
           setData({
             type: "Leave Request",
+            studentId: resData.student_id,
+            hodId: resData.hod_id,
+
             studentName: resData.student?.name,
             department: resData.student?.department_name,
             fromDate: resData.from_date,
             toDate: resData.to_date,
             reason: resData.reason,
             status: resData.overall_status,
-            approverName: resData.current_approver?.name || "HOD",
-            approverRole: resData.current_approver?.role || "hod",
           });
         }
 
         if (requestType === "certificate") {
           setData({
             type: "Certificate Request",
+            studentId: resData.student_id,
+            hodId: resData.hod_id,
+            principalId: resData.principal_id,
+
             studentName: resData.student?.name,
             department: resData.student?.department_name,
             certificates: resData.certificates,
             purpose: resData.purpose,
             status: resData.overall_status,
-            approverName: "Office",
-            approverRole: "admin",
           });
         }
+
 
         if (requestType === "custom") {
           setData({
             type: "Custom Letter",
+
+            studentId: resData.student_id,
+            toUserId: resData.receiver_id,
+
             studentName: resData.student?.name,
             department: resData.student?.department_name,
+
+            // ✅ NORMALISED KEYS
             to: resData.to_role,
-            customContent: resData.content,
+            content: customContent,     
             status: resData.status,
-            approverName: resData.to_role,
-            approverRole: resData.to_role?.toLowerCase(),
           });
         }
+
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
   }, [id, token, requestType]);
 
   /* --------------------------------------------------
-     Approval permission
+     Approval permission (FIXED)
   -------------------------------------------------- */
-  const canApprove =
-    data &&
-    ["hod", "vice_principal", "principal"].includes(user?.role) &&
-    data.status === "in_progress";
+  const actionConfig = (() => {
+  if (!data) return null;
+
+  const role = user?.role;
+
+  /* ---------------- LEAVE ---------------- */
+  if (requestType === "leave") {
+    if (role === "hod" && data.status === "pending") {
+      return {
+        primary: { label: "Approve", action: "approved" },
+        secondary: { label: "Reject", action: "rejected" },
+      };
+    }
+    return null;
+  }
+
+  /* ---------------- CERTIFICATE ---------------- */
+  if (requestType === "certificate" && ["in_progress", "forwarded"].includes(data.status)) {
+    if (role === "hod" && data.status === "in_progress") {
+      return {
+        primary: { label: "Forward", action: "forwarded" },
+        secondary: { label: "Reject", action: "rejected" },
+      };
+    }
+
+    if (role === "principal" && data.status==="forwarded") {
+      return {
+        primary: { label: "Approve", action: "approved" },
+        secondary: { label: "Reject", action: "rejected" },
+      };
+    }
+
+    return null;
+  }
+
+  /* ---------------- CUSTOM LETTER ---------------- */
+  if (requestType === "custom") {
+    if (role !== "student" && data.status === "submitted") {
+      return {
+        primary: { label: "Approve", action: "approved" },
+        secondary: { label: "Reject", action: "rejected" },
+      };
+    }
+    return null;
+  }
+
+  return null;
+})();
 
   /* --------------------------------------------------
      Approve / Reject handler
   -------------------------------------------------- */
-  const handleDecision = async (decision) => {
-    let apiUrl = "";
+  const handleDecision = async (action) => {
+  let apiUrl = "";
+  let payload = {};
 
-    if (requestType === "leave") {
-      apiUrl = `http://localhost:8000/leaves/${id}/decision`;
+  /* ---------------- LEAVE ---------------- */
+  if (requestType === "leave") {
+    apiUrl = `http://localhost:8000/leaves/${id}/decision`;
+    payload = { status: action };
+  }
+
+  /* ---------------- CERTIFICATE ---------------- */
+  else if (requestType === "certificate") {
+    if (action === "forwarded") {
+      apiUrl = `http://localhost:8000/certificate-requests/${id}/forward`;
+    } else if (action === "rejected") {
+      apiUrl = `http://localhost:8000/certificate-requests/${id}/reject`;
+    } else if (action === "approved") {
+      apiUrl = `http://localhost:8000/certificate-requests/${id}/approve`;
     }
-    if (requestType === "certificate") {
-      apiUrl = `http://localhost:8000/certificate-requests/${id}/decision`;
-    }
-    if (requestType === "custom") {
-      apiUrl = `http://localhost:8000/custom-letter-requests/${id}/decision`;
+  }
+
+  /* ---------------- CUSTOM LETTER ---------------- */
+  else if (requestType === "custom") {
+    apiUrl = `http://localhost:8000/custom-letters/${id}/decision`;
+    payload = { status: action };
+  }
+
+  if (!apiUrl) {
+    alert("Invalid action");
+    return;
+  }
+
+  try {
+    const res = await fetch(apiUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: Object.keys(payload).length ? JSON.stringify(payload) : null,
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || "Action failed");
     }
 
-    try {
-      const res = await fetch(apiUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ status: decision }),
-      });
-
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.detail || "Action failed");
-      }
-
-      window.location.reload();
-    } catch (err) {
-      alert(err.message);
-    }
-  };
+    window.location.reload();
+  } catch (err) {
+    alert(err.message);
+  }
+};
 
   /* --------------------------------------------------
      PDF Download
@@ -200,7 +308,6 @@ export default function ViewRequest() {
   -------------------------------------------------- */
   return (
     <div className="min-h-screen bg-gray-100 px-6 py-6">
-      {/* HEADER */}
       <div className="max-w-3xl mx-auto text-center mb-6">
         <h1 className="text-3xl font-semibold">{data.type}</h1>
         <p className="text-sm text-gray-600 mt-1">
@@ -208,78 +315,71 @@ export default function ViewRequest() {
         </p>
       </div>
 
-      {/* PREVIEW */}
       <div className="max-w-3xl mx-auto flex items-center flex-col">
         <div ref={previewRef}>
           {requestType === "leave" && <LetterPreview data={data} />}
           {requestType === "certificate" && <CertificatePreview data={data} />}
           {requestType === "custom" && <CustomLetterPreview data={data} />}
         </div>
+        {/* ACTION BAR */}
+<div className="w-full max-w-3xl mt-10 sticky top-4 z-30">
+  <div className="flex items-center justify-between bg-white border border-gray-200 shadow-sm rounded-xl px-4 py-3">
 
-        {/* INFO */}
-        <div className="mt-6 space-y-3 text-sm text-gray-700 w-full">
-          <p>
-            <span className="font-medium text-black">Current Status:</span>{" "}
-            {data?.status
-  ? data.status.replace("_", " ")
-  : "Pending"}
+    {/* LEFT: DOWNLOAD + SHARE */}
+    <div className="flex gap-2">
+      <button
+        onClick={downloadPDF}
+        className="px-4 py-2 rounded-md bg-black text-white text-xs hover:opacity-90"
+      >
+        Download PDF
+      </button>
+
+      <button
+        onClick={() => setShowShare(true)}
+        className="px-4 py-2 rounded-md border border-black text-black text-xs hover:bg-gray-100"
+      >
+        Share
+      </button>
+    </div>
+
+    {/* CENTER: ACTIONS */}
+{actionConfig && (
+  <div className="flex gap-3">
+    {actionConfig.secondary && (
+      <button
+        onClick={() => handleDecision(actionConfig.secondary.action)}
+        className="px-5 py-2 rounded-md bg-red-700 text-white text-sm hover:opacity-90"
+      >
+        {actionConfig.secondary.label}
+      </button>
+    )}
+
+    <button
+      onClick={() => handleDecision(actionConfig.primary.action)}
+      className="px-5 py-2 rounded-md bg-green-700 text-white text-sm hover:opacity-90"
+    >
+      {actionConfig.primary.label}
+    </button>
+  </div>
+)}
 
 
-          </p>
+    {/* RIGHT: MESSAGE */}
+    <div>
+      <button
+        onClick={handleSendMessage}
+        className="px-4 py-2 rounded-md border border-black text-black text-xs hover:bg-gray-100"
+      >
+        Send Message
+      </button>
+    </div>
 
-          <div className="flex items-center justify-between">
-            <p>
-              <span className="font-medium text-black">For queries:</span>{" "}
-              {data.approverName} ({data.approverRole?.toUpperCase()})
-            </p>
+  </div>
+</div>
 
-            <button
-              onClick={() => alert("Message flow coming next")}
-              className="px-3 py-1.5 text-xs rounded-md border border-black text-black hover:bg-gray-100"
-            >
-              Send Message
-            </button>
-          </div>
-        </div>
-
-        {/* ACTIONS */}
-        <div className="flex justify-center gap-4 mt-8">
-          <button
-            onClick={downloadPDF}
-            className="px-6 py-2 rounded-md bg-black text-white text-sm hover:opacity-90"
-          >
-            Download PDF
-          </button>
-
-          <button
-            onClick={() => setShowShare(true)}
-            className="px-6 py-2 rounded-md border border-black text-black text-sm hover:bg-gray-100"
-          >
-            Share
-          </button>
-        </div>
-
-        {/* APPROVAL ACTIONS */}
-        {canApprove && (
-          <div className="mt-8 flex justify-center gap-4">
-            <button
-              onClick={() => handleDecision("approved")}
-              className="px-6 py-2 rounded-md bg-green-600 text-white text-sm hover:opacity-90"
-            >
-              Approve
-            </button>
-
-            <button
-              onClick={() => handleDecision("rejected")}
-              className="px-6 py-2 rounded-md bg-red-600 text-white text-sm hover:opacity-90"
-            >
-              Reject
-            </button>
-          </div>
-        )}
+        
       </div>
 
-      {/* SHARE MODAL */}
       {showShare && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl w-full max-w-sm p-6 shadow-xl">

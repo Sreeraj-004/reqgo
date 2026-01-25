@@ -7,6 +7,7 @@ import StudentDashboard from "./pages/StudentDashboard";
 import NewRequestLetter from "./pages/RequestLetter";
 import Dashboard from "./pages/Dashboard";
 import ViewRequest from "./pages/ViewRequest";
+import ChatPage from "./pages/ChatPage";
 
 function App() {
   const isLoggedIn = false; // fake auth for now
@@ -35,6 +36,7 @@ function App() {
         <Route path="/leaves/:id" element={<ViewRequest />} />
         <Route path="/certificate-requests/:id" element={<ViewRequest />} />
         <Route path="/custom-letters/:id" element={<ViewRequest />} />
+        <Route path="/messages/new" element={<ChatPage />} />
 
 
 

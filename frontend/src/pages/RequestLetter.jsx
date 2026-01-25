@@ -93,12 +93,24 @@ export default function NewRequestLetter() {
       }
 
       if (isCustom) {
-        // backend integration later
-        console.log({
-          to: customTo,
-          content: customContent,
+        const res = await fetch("http://localhost:8000/custom-letters", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            to_role: customTo,
+            content: customContent,
+          }),
         });
+
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.detail || "Failed to submit custom letter");
+        }
       }
+
 
       setSuccess(true);
 
@@ -287,6 +299,9 @@ export default function NewRequestLetter() {
         {/* PREVIEW */}
         {isCustom && (
           <CustomLetterPreview data={previewData} />
+        )}
+        {isLeave && (
+          <LetterPreview data={previewData} />
         )}
 
 

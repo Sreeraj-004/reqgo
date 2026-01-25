@@ -63,7 +63,7 @@ export default function LetterPreview({ data }) {
                 <span className="font-medium text-gray-700">
                   Current Status:
                 </span>{" "}
-                Pending
+                {data?.status ? data.status.replace("_", " ") : "Pending"}
               </p>
             </div>
           )}

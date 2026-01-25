@@ -67,7 +67,7 @@ export default function CertificatePreview({ data }) {
           <span className="font-medium text-gray-700">
             Current Status:
           </span>{" "}
-          Pending (HOD Review)
+          {data?.status ? data.status.replace("_", " ") : "Pending"}
         </p>
       </div>
     </div>

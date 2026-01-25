@@ -39,6 +39,7 @@ class User(Base):
 
     certificate_requests = relationship(
         "CertificateRequest",
+        foreign_keys="CertificateRequest.student_id",
         back_populates="student",
         cascade="all, delete-orphan",
     )
@@ -73,6 +74,11 @@ class LeaveRequest(Base):
     id = Column(Integer, primary_key=True, index=True)
 
     student_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    hod_id = Column(
+        Integer,
+        ForeignKey("users.id"),
+        nullable=False,
+    )
 
     leave_type = Column(String(50), nullable=False)
     subject = Column(String(255), nullable=False)
@@ -140,17 +146,24 @@ class LeaveApproval(Base):
     )
 
 
-class LeaveMessage(Base):
-    __tablename__ = "leave_messages"
+class Message(Base):
+    __tablename__ = "messages"
 
     id = Column(Integer, primary_key=True, index=True)
-    leave_id = Column(Integer, ForeignKey("leave_requests.id"), nullable=False)
-    sender_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    content = Column(Text, nullable=False)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
 
-    leave = relationship("LeaveRequest", backref="messages")
-    sender = relationship("User")
+    sender_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    receiver_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+
+    content = Column(Text, nullable=False)
+
+    created_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+    sender = relationship("User", foreign_keys=[sender_id])
+    receiver = relationship("User", foreign_keys=[receiver_id])
 
 
 
@@ -169,6 +182,17 @@ class CertificateRequest(Base):
     certificates = Column(Text, nullable=False)
 
     purpose = Column(Text, nullable=True)
+    hod_id = Column(
+        Integer,
+        ForeignKey("users.id"),
+        nullable=False,
+    )
+
+    principal_id = Column(
+        Integer,
+        ForeignKey("users.id"),
+        nullable=False,
+    )
 
     # in_progress → approved → rejected
     overall_status = Column(
@@ -189,7 +213,11 @@ class CertificateRequest(Base):
     )
 
     # relationships
-    student = relationship("User", back_populates="certificate_requests")
+    student = relationship(
+        "User",
+        foreign_keys=[student_id],
+        back_populates="certificate_requests",
+    )
 
     approvals = relationship(
         "CertificateApproval",
@@ -242,6 +270,12 @@ class CustomLetterRequest(Base):
         index=True,
     )
 
+    receiver_id = Column(
+        Integer,
+        ForeignKey("users.id"),
+        nullable=False,
+    )
+
     to_role = Column(String(50), nullable=False)  # principal / vice_principal / hod
     content = Column(Text, nullable=False)
 
@@ -264,6 +298,14 @@ class CustomLetterRequest(Base):
         nullable=False,
     )
 
-    # relationship
-    student = relationship("User", backref="custom_letter_requests")
+    # ✅ EXPLICIT RELATIONSHIPS (THIS IS THE KEY)
+    student = relationship(
+        "User",
+        foreign_keys=[student_id],
+        backref="custom_letter_requests",
+    )
 
+    receiver = relationship(
+        "User",
+        foreign_keys=[receiver_id],
+    )

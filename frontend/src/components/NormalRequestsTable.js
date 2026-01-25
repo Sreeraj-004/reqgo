@@ -30,6 +30,18 @@ export default function NormalRequestsTable() {
     fetchRequests();
   }, []);
 
+  const getStatusStyles = (status) => {
+    switch (status) {
+      case "approved":
+        return "bg-green-100 text-green-700";
+      case "rejected":
+        return "bg-red-100 text-red-700";
+      case "in_progress":
+      default:
+        return "bg-yellow-100 text-yellow-700";
+    }
+  };
+
   return (
     <div className="mt-6 pr-8">
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
@@ -40,6 +52,7 @@ export default function NormalRequestsTable() {
               <th className="px-6 py-3">Type</th>
               <th className="px-6 py-3">Subject</th>
               <th className="px-6 py-3">Date</th>
+              <th className="px-6 py-3">Status</th>
               <th className="px-6 py-3">Action</th>
             </tr>
           </thead>
@@ -47,7 +60,7 @@ export default function NormalRequestsTable() {
           <tbody className="divide-y">
             {loading && (
               <tr>
-                <td colSpan="5" className="px-6 py-6 text-center text-gray-500">
+                <td colSpan="6" className="px-6 py-6 text-center text-gray-500">
                   Loading requests...
                 </td>
               </tr>
@@ -55,7 +68,7 @@ export default function NormalRequestsTable() {
 
             {!loading && requests.length === 0 && (
               <tr>
-                <td colSpan="5" className="px-6 py-6 text-center text-gray-500">
+                <td colSpan="6" className="px-6 py-6 text-center text-gray-500">
                   No requests
                 </td>
               </tr>
@@ -71,16 +84,18 @@ export default function NormalRequestsTable() {
                     {new Date(req.created_at).toLocaleDateString("en-GB")}
                   </td>
                   <td className="px-6 py-4">
+                    <span
+                      className={`px-3 py-1 rounded-full text-xs font-medium capitalize ${getStatusStyles(
+                        req.overall_status
+                      )}`}
+                    >
+                      {req.overall_status}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4">
                     <button
                       onClick={() => navigate(req.view_url)}
-                      className="
-                        px-4 py-1.5
-                        rounded-md
-                        bg-black text-white
-                        text-xs
-                        hover:opacity-90
-                        transition
-                      "
+                      className="px-4 py-1.5 rounded-md bg-black text-white text-xs hover:opacity-90 transition"
                     >
                       View
                     </button>

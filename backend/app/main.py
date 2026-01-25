@@ -9,6 +9,9 @@ from fastapi import Depends, FastAPI, HTTPException, status
 from passlib.context import CryptContext
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+from app.services.message_service import send_system_message
+from sqlalchemy import or_, and_
+
 
 from . import models, schemas
 
@@ -354,12 +357,46 @@ def create_leave_request(
     db: Session = Depends(get_db),
 ):
     if current_user.role != "student":
-        raise HTTPException(status_code=403, detail="Only students can request leave")
+        raise HTTPException(
+            status_code=403,
+            detail="Only students can request leave",
+        )
+
+    if current_user.access_status != "approved":
+        raise HTTPException(
+            status_code=400,
+            detail="Student access not approved",
+        )
+
+    if not current_user.department_name or not current_user.college_name:
+        raise HTTPException(
+            status_code=400,
+            detail="Student department or college not assigned",
+        )
+
+    # 🔍 Find HOD of same department & college
+    hod = (
+        db.query(models.User)
+        .filter(
+            models.User.role == "hod",
+            models.User.department_name == current_user.department_name,
+            models.User.college_name == current_user.college_name,
+            models.User.access_status == "approved",
+        )
+        .first()
+    )
+
+    if not hod:
+        raise HTTPException(
+            status_code=404,
+            detail="HOD not found for student's department",
+        )
 
     leave = models.LeaveRequest(
         student_id=current_user.id,
         leave_type=leave_in.leave_type,
         subject=leave_in.subject,
+        hod_id=hod.id,
         reason=leave_in.reason,
         from_date=leave_in.from_date,
         to_date=leave_in.to_date,
@@ -369,6 +406,20 @@ def create_leave_request(
     db.add(leave)
     db.commit()
     db.refresh(leave)
+    request_link = f"/leaves/{leave.id}"
+
+    send_system_message(
+        db=db,
+        sender_id=current_user.id,
+        receiver_id=hod.id,
+        text=f"I have submitted a leave request.",
+    )
+    send_system_message(
+        db=db,
+        sender_id=current_user.id,
+        receiver_id=hod.id,
+        text=request_link,
+    )
 
     return leave
 
@@ -688,29 +739,41 @@ def render_leave_body(
     return content
 
 
-@app.post("/certificate-requests", response_model=schemas.CertificateRequestOut, status_code=201)
+@app.post(
+    "/certificate-requests",
+    response_model=schemas.CertificateRequestOut,
+    status_code=201,
+)
 def create_certificate_request(
     data: schemas.CertificateRequestCreate,
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     if current_user.role != "student":
-        raise HTTPException(403, "Only students can request certificates")
+        raise HTTPException(
+            status_code=403,
+            detail="Only students can request certificates",
+        )
 
     if not data.certificates or not any(c.strip() for c in data.certificates):
-        raise HTTPException(400, "At least one certificate is required")
+        raise HTTPException(
+            status_code=400,
+            detail="At least one certificate is required",
+        )
 
-    request = models.CertificateRequest(
-        student_id=current_user.id,
-        certificates=",".join(data.certificates),
-        purpose=data.purpose,
-        overall_status="in_progress",
-    )
+    if current_user.access_status != "approved":
+        raise HTTPException(
+            status_code=400,
+            detail="Student access not approved",
+        )
 
-    db.add(request)
-    db.commit()
-    db.refresh(request)
+    if not current_user.college_name or not current_user.department_name:
+        raise HTTPException(
+            status_code=400,
+            detail="Student college or department not assigned",
+        )
 
+    # 🔍 Find HOD
     hod = (
         db.query(models.User)
         .filter(
@@ -723,8 +786,57 @@ def create_certificate_request(
     )
 
     if not hod:
-        raise HTTPException(400, "HOD not found for your department")
+        raise HTTPException(
+            status_code=400,
+            detail="HOD not found for your department",
+        )
 
+    # 🔍 Find Principal
+    principal = (
+        db.query(models.User)
+        .filter(
+            models.User.role == "principal",
+            models.User.college_name == current_user.college_name,
+            models.User.access_status == "approved",
+        )
+        .first()
+    )
+
+    if not principal:
+        raise HTTPException(
+            status_code=400,
+            detail="Principal not found for your college",
+        )
+
+    # 🧾 Create certificate request WITH routing IDs
+    request = models.CertificateRequest(
+        student_id=current_user.id,
+        hod_id=hod.id,
+        principal_id=principal.id,
+        certificates=",".join(data.certificates),
+        purpose=data.purpose,
+        overall_status="in_progress",
+    )
+
+    db.add(request)
+    db.commit()
+    db.refresh(request)
+    request_link = f"/certificate-requests/{request.id}"
+
+    send_system_message(
+        db=db,
+        sender_id=current_user.id,
+        receiver_id=hod.id,
+        text=f"I have submitted a certificate request.",
+    )
+    send_system_message(
+        db=db,
+        sender_id=current_user.id,
+        receiver_id=hod.id,
+        text=request_link,
+    )
+
+    # 📝 Create first approval (HOD)
     approval = models.CertificateApproval(
         request_id=request.id,
         approver_id=hod.id,
@@ -735,15 +847,125 @@ def create_certificate_request(
     db.add(approval)
     db.commit()
 
-    # ✅ MANUAL RESPONSE (THIS IS THE KEY)
+    # ✅ Explicit response (stable & predictable)
     return schemas.CertificateRequestOut(
         id=request.id,
         student_id=request.student_id,
+        hod_id=request.hod_id,
+        principal_id=request.principal_id,
         certificates=request.certificates.split(","),
         purpose=request.purpose,
         overall_status=request.overall_status,
         created_at=request.created_at,
     )
+
+@app.post(
+    "/custom-letters",
+    response_model=schemas.CustomLetterOut,
+    status_code=201,
+)
+def create_custom_letter(
+    data: schemas.CustomLetterCreate,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if current_user.role != "student":
+        raise HTTPException(
+            status_code=403,
+            detail="Only students can create custom letters",
+        )
+
+    if current_user.access_status != "approved":
+        raise HTTPException(
+            status_code=400,
+            detail="Student access not approved",
+        )
+
+    if not data.to_role or not data.content:
+        raise HTTPException(
+            status_code=400,
+            detail="Recipient and content are required",
+        )
+
+    # 🔍 Resolve receiver based on role
+    receiver = (
+        db.query(models.User)
+        .filter(
+            models.User.role == data.to_role.lower(),
+            models.User.college_name == current_user.college_name,
+            models.User.access_status == "approved",
+        )
+        .first()
+    )
+
+    if not receiver:
+        raise HTTPException(
+            status_code=404,
+            detail=f"{data.to_role} not found for your college",
+        )
+
+    letter = models.CustomLetterRequest(
+        student_id=current_user.id,
+        receiver_id=receiver.id,
+        to_role=data.to_role,
+        content=data.content,
+        status="submitted",
+    )
+
+    db.add(letter)
+    db.commit()
+    db.refresh(letter)
+    request_link = f"/custom-letters/{letter.id}"
+
+    send_system_message(
+        db=db,
+        sender_id=current_user.id,
+        receiver_id=receiver.id,
+        text="I have submitted a request letter.",
+    )
+
+    send_system_message(
+        db=db,
+        sender_id=current_user.id,
+        receiver_id=receiver.id,
+        text=request_link,
+    )
+
+    return letter
+
+
+@app.get("/custom-letters/{letter_id}")
+def get_custom_letter(
+    letter_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    letter = (
+        db.query(models.CustomLetterRequest)
+        .filter(models.CustomLetterRequest.id == letter_id)
+        .first()
+    )
+
+    if not letter:
+        raise HTTPException(404, "Custom letter not found")
+
+    if current_user.id not in (letter.student_id, letter.receiver_id):
+        raise HTTPException(403, "Not authorized to view this letter")
+
+    return {
+        "id": letter.id,
+        "student_id": letter.student_id,
+        "receiver_id": letter.receiver_id,
+        "to_role": letter.to_role,
+        "content": letter.content,
+        "status": letter.status,
+        "created_at": letter.created_at,
+        "student": {
+            "name": letter.student.name,
+            "department": letter.student.department_name,
+        },
+    }
+
 
 @app.post("/certificate-requests/{request_id}/approve")
 def approve_certificate_request(
@@ -752,6 +974,18 @@ def approve_certificate_request(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
+    if current_user.role != "principal":
+        raise HTTPException(403, "Only Principal can approve certificate requests")
+
+    cert_request = (
+        db.query(models.CertificateRequest)
+        .filter(models.CertificateRequest.id == request_id)
+        .first()
+    )
+
+    if not cert_request:
+        raise HTTPException(404, "Certificate request not found")
+
     approval = (
         db.query(models.CertificateApproval)
         .filter(
@@ -763,40 +997,19 @@ def approve_certificate_request(
     )
 
     if not approval:
-        raise HTTPException(404, "No pending approval found")
+        raise HTTPException(409, "No pending approval found for principal")
 
+    # Update approval
     approval.status = "approved"
     approval.remarks = remarks
     approval.acted_at = datetime.utcnow()
 
-    # Forward logic
-    if approval.approver_role == "hod":
-        principal = (
-            db.query(models.User)
-            .filter(
-                models.User.college_name == current_user.college_name,
-                models.User.role.in_(["principal", "vice_principal"]),
-            )
-            .first()
-        )
-
-        if principal:
-            db.add(
-                models.CertificateApproval(
-                    request_id=request_id,
-                    approver_id=principal.id,
-                    approver_role=principal.role,
-                    status="pending",
-                )
-            )
-
-    else:
-        # Final approval
-        approval.request.overall_status = "approved"
+    # Final status update
+    cert_request.overall_status = "approved"
 
     db.commit()
-    return {"message": "Certificate request approved"}
 
+    return {"message": "Certificate request approved successfully"}
 
 #edit - college - get
 @app.get("/colleges/by-principal/{principal_id}")
@@ -949,71 +1162,198 @@ def get_all_requests(
     db: Session = Depends(get_db),
 ):
     results = []
+    role = current_user.role
 
-    # -------------------------
-    # LEAVE REQUESTS
-    # -------------------------
-    leaves = (
-        db.query(models.LeaveRequest)
-        .join(models.User, models.LeaveRequest.student_id == models.User.id)
-        .all()
-    )
+    # =========================
+    # STUDENT
+    # =========================
+    if role == "student":
+        # Leave
+        leaves = (
+            db.query(models.LeaveRequest)
+            .filter(models.LeaveRequest.student_id == current_user.id)
+            .all()
+        )
 
-    for leave in leaves:
-        results.append({
-            "id": leave.id,
-            "sender": leave.student.name,
-            "type": "Leave",
-            "subject": leave.subject,
-            "created_at": leave.created_at,
-            "view_url": f"/leaves/{leave.id}",
-        })
+        for leave in leaves:
+            results.append({
+                "id": leave.id,
+                "sender": current_user.name,
+                "type": "Leave",
+                "subject": leave.subject,
+                "created_at": leave.created_at,
+                "overall_status": leave.overall_status,
+                "view_url": f"/leaves/{leave.id}",
+            })
 
-    # -------------------------
-    # CERTIFICATE REQUESTS
-    # -------------------------
-    certificates = (
-        db.query(models.CertificateRequest)
-        .join(models.User, models.CertificateRequest.student_id == models.User.id)
-        .all()
-    )
+        # Certificate
+        certificates = (
+            db.query(models.CertificateRequest)
+            .filter(models.CertificateRequest.student_id == current_user.id)
+            .all()
+        )
 
-    for cert in certificates:
-        results.append({
-            "id": cert.id,
-            "sender": cert.student.name,
-            "type": "Certificate",
-            "subject": "Certificate Request",
-            "created_at": cert.created_at,
-            "view_url": f"/certificate-requests/{cert.id}",
-        })
+        for cert in certificates:
+            results.append({
+                "id": cert.id,
+                "sender": current_user.name,
+                "type": "Certificate",
+                "subject": "Certificate Request",
+                "created_at": cert.created_at,
+                "overall_status": cert.overall_status,
+                "view_url": f"/certificate-requests/{cert.id}",
+            })
 
-    # -------------------------
-    # CUSTOM LETTERS
-    # -------------------------
-    custom_letters = (
-        db.query(models.CustomLetterRequest)
-        .join(models.User, models.CustomLetterRequest.student_id == models.User.id)
-        .all()
-    )
+        # Custom Letter
+        letters = (
+            db.query(models.CustomLetterRequest)
+            .filter(models.CustomLetterRequest.student_id == current_user.id)
+            .all()
+        )
 
-    for letter in custom_letters:
-        results.append({
-            "id": letter.id,
-            "sender": letter.student.name,
-            "type": "Custom Letter",
-            "subject": f"Letter to {letter.to_role}",
-            "created_at": letter.created_at,
-            "view_url": f"/custom-letters/{letter.id}",
-        })
+        for letter in letters:
+            results.append({
+                "id": letter.id,
+                "sender": current_user.name,
+                "type": "Custom Letter",
+                "subject": f"Letter to {letter.to_role}",
+                "created_at": letter.created_at,
+                "overall_status": letter.status,
+                "view_url": f"/custom-letters/{letter.id}",
+            })
 
-    # -------------------------
-    # SORT BY TIME DESC
-    # -------------------------
+    # =========================
+    # HOD
+    # =========================
+    elif role == "hod":
+        # Leave (show all for now)
+        leaves = db.query(models.LeaveRequest).all()
+        for leave in leaves:
+            results.append({
+                "id": leave.id,
+                "sender": leave.student.name,
+                "type": "Leave",
+                "subject": leave.subject,
+                "created_at": leave.created_at,
+                "overall_status": leave.overall_status,
+                "view_url": f"/leaves/{leave.id}",
+            })
+
+        # Certificate (HOD approvals)
+        certs = (
+            db.query(models.CertificateApproval)
+            .join(models.CertificateRequest)
+            .filter(
+                models.CertificateApproval.approver_role == "hod",
+                models.CertificateApproval.status == "pending",
+            )
+            .all()
+        )
+
+        for approval in certs:
+            cert = approval.request
+            results.append({
+                "id": cert.id,
+                "sender": cert.student.name,
+                "type": "Certificate",
+                "subject": "Certificate Request",
+                "created_at": cert.created_at,
+                "overall_status": cert.overall_status,
+                "view_url": f"/certificate-requests/{cert.id}",
+            })
+
+        # Custom Letter
+        letters = (
+            db.query(models.CustomLetterRequest)
+            .filter(models.CustomLetterRequest.to_role == "hod")
+            .all()
+        )
+
+        for letter in letters:
+            results.append({
+                "id": letter.id,
+                "sender": letter.student.name,
+                "type": "Custom Letter",
+                "subject": f"Letter to {letter.to_role}",
+                "created_at": letter.created_at,
+                "overall_status": letter.status,
+                "view_url": f"/custom-letters/{letter.id}",
+            })
+
+    # =========================
+    # VICE PRINCIPAL
+    # =========================
+    elif role == "vice_principal":
+        letters = (
+            db.query(models.CustomLetterRequest)
+            .filter(models.CustomLetterRequest.to_role == "vice_principal")
+            .all()
+        )
+
+        for letter in letters:
+            results.append({
+                "id": letter.id,
+                "sender": letter.student.name,
+                "type": "Custom Letter",
+                "subject": f"Letter to {letter.to_role}",
+                "created_at": letter.created_at,
+                "overall_status": letter.status,
+                "view_url": f"/custom-letters/{letter.id}",
+            })
+
+    # =========================
+    # PRINCIPAL
+    # =========================
+    elif role == "principal":
+        # Certificate
+        certs = (
+            db.query(models.CertificateApproval)
+            .join(models.CertificateRequest)
+            .filter(
+                # models.CertificateApproval.approver_role == "principal",
+                # models.CertificateApproval.status.in_(["pending", "forwarded"]),
+                models.CertificateRequest.overall_status.in_(["approved", "forwarded","rejected"]),
+            )
+            .all()
+        )
+
+        for approval in certs:
+            cert = approval.request
+            results.append({
+                "id": cert.id,
+                "sender": cert.student.name,
+                "type": "Certificate",
+                "subject": "Certificate Request",
+                "created_at": cert.created_at,
+                "overall_status": cert.overall_status,
+                "view_url": f"/certificate-requests/{cert.id}",
+            })
+
+        # Custom Letter
+        letters = (
+            db.query(models.CustomLetterRequest)
+            .filter(models.CustomLetterRequest.to_role == "principal")
+            .all()
+        )
+
+        for letter in letters:
+            results.append({
+                "id": letter.id,
+                "sender": letter.student.name,
+                "type": "Custom Letter",
+                "subject": f"Letter to {letter.to_role}",
+                "created_at": letter.created_at,
+                "overall_status": letter.status,
+                "view_url": f"/custom-letters/{letter.id}",
+            })
+
+    # =========================
+    # SORT
+    # =========================
     results.sort(key=lambda x: x["created_at"], reverse=True)
-
     return results
 
+
 @app.get("/certificate-requests/{request_id}")
 def get_certificate_request(
     request_id: int,
@@ -1031,15 +1371,23 @@ def get_certificate_request(
 
     return {
         "id": request.id,
+
+        # ✅ IDs REQUIRED FOR MESSAGE ROUTING
+        "student_id": request.student_id,
+        "hod_id": request.hod_id,
+        "principal_id": request.principal_id,
+
         "type": "Certificate",
         "student": {
             "name": request.student.name,
             "department": request.student.department_name,
         },
+
         "certificates": request.certificates.split(","),
         "purpose": request.purpose,
-        "status": request.overall_status,
+        "overall_status": request.overall_status,
         "created_at": request.created_at,
+
         "approvals": [
             {
                 "role": a.approver_role,
@@ -1051,50 +1399,102 @@ def get_certificate_request(
         ],
     }
 
-@app.get("/certificate-requests/{request_id}")
-def get_certificate_request(
-    request_id: int,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
-):
-    request = (
-        db.query(models.CertificateRequest)
-        .filter(models.CertificateRequest.id == request_id)
-        .first()
-    )
-
-    if not request:
-        raise HTTPException(status_code=404, detail="Certificate request not found")
-
-    # Authorization: student can view own request, approvers can view all
-    if current_user.role == "student" and request.student_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Not authorized")
-
-    return {
-        "id": request.id,
-        "type": "Certificate",
-        "student": {
-            "name": request.student.name,
-            "department": request.student.department_name,
-        },
-        "certificates": request.certificates.split(","),
-        "purpose": request.purpose,
-        "status": request.overall_status,
-        "created_at": request.created_at,
-        "approvals": [
-            {
-                "role": a.approver_role,
-                "status": a.status,
-                "remarks": a.remarks,
-                "acted_at": a.acted_at,
-            }
-            for a in request.approvals
-        ],
-    }
 
 class DecisionSchema(BaseModel):
-    status: str  # approved | rejected
+    overall_status: str  # approved | rejected
     remarks: Optional[str] = None
+
+
+@app.post("/certificate-requests/{request_id}/forward")
+def forward_certificate_request(
+    request_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    if current_user.role != "hod":
+        raise HTTPException(
+            status_code=403,
+            detail="Only HOD can forward certificate requests",
+        )
+
+    cert_request = (
+        db.query(models.CertificateRequest)
+        .filter(models.CertificateRequest.id == request_id)
+        .first()
+    )
+
+    hod_approval = (
+        db.query(models.CertificateApproval)
+        .filter(
+            models.CertificateApproval.request_id == request_id,
+            models.CertificateApproval.approver_id == current_user.id,
+        )
+        .first()
+    )
+
+    if not hod_approval:
+        raise HTTPException(
+            status_code=400,
+            detail="Approval record not found for this HOD",
+        )
+
+
+    hod_approval.status = "forwarded"
+    hod_approval.acted_at = datetime.utcnow()
+
+    cert_request.overall_status = "forwarded"
+
+    db.add(hod_approval)
+    db.commit()
+
+    return {"message": "Certificate forwarded successfully"}
+
+
+@app.post("/certificate-requests/{request_id}/reject")
+def reject_certificate_request(
+    request_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    # Only allowed roles
+    if current_user.role not in ["hod", "principal"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not allowed to reject certificate requests",
+        )
+
+    cert_request = (
+        db.query(models.CertificateRequest)
+        .filter(models.CertificateRequest.id == request_id)
+        .first()
+    )
+
+    if not cert_request:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Certificate request not found",
+        )
+
+
+    approval = (
+        db.query(models.CertificateApproval)
+        .filter(
+            models.CertificateApproval.request_id == request_id,
+            models.CertificateApproval.approver_role == current_user.role,
+        )
+        .first()
+    )
+
+
+    # Terminal state
+    cert_request.overall_status = "rejected"
+
+    db.commit()
+
+    return {
+        "message": "Certificate request rejected successfully",
+        "rejected_by": current_user.role,
+    }
 
 
 @app.post("/leaves/{leave_id}/decision")
@@ -1163,3 +1563,47 @@ def decide_certificate_request(
 
     return {"message": f"Certificate request {payload.status}"}
 
+
+@app.post("/messages", status_code=201)
+def send_message(
+    data: schemas.MessageCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    msg = models.Message(
+        sender_id=current_user.id,
+        receiver_id=data.receiver_id,
+        content=data.content,
+    )
+
+    db.add(msg)
+    db.commit()
+    db.refresh(msg)
+
+    return msg
+
+@app.get("/messages/{other_user_id}")
+def get_messages(
+    other_user_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    messages = (
+        db.query(models.Message)
+        .filter(
+            or_(
+                and_(
+                    models.Message.sender_id == current_user.id,
+                    models.Message.receiver_id == other_user_id,
+                ),
+                and_(
+                    models.Message.sender_id == other_user_id,
+                    models.Message.receiver_id == current_user.id,
+                ),
+            )
+        )
+        .order_by(models.Message.created_at)
+        .all()
+    )
+
+    return messages 

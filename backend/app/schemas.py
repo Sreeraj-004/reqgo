@@ -72,6 +72,8 @@ class LeaveOut(BaseModel):
     id: int
     leave_type: str
     subject: str
+    student_id: int
+    hod_id: int
     reason: Optional[str]
     from_date: date
     to_date: date
@@ -82,6 +84,33 @@ class LeaveOut(BaseModel):
 
     class Config:
         orm_mode = True
+
+class UserMini(BaseModel):
+    name: str
+    department_name: str | None = None
+
+    class Config:
+        from_attributes = True
+
+class CustomLetterOut(BaseModel):
+    id: int
+
+    # ✅ REQUIRED FOR MESSAGE ROUTING
+    student_id: int
+    receiver_id: int
+
+    to_role: str
+    content: str
+    status: str
+
+    created_at: datetime
+    updated_at: datetime
+
+    # UI convenience
+    student: UserMini
+
+    class Config:
+        from_attributes = True
 
 
 class MessageCreate(BaseModel):
@@ -197,6 +226,7 @@ class UnifiedRequestOut(BaseModel):
     type: str
     subject: str
     created_at: datetime
+    overall_status: str
     view_url: str
 
     class Config:
@@ -206,3 +236,24 @@ class UnifiedRequestOut(BaseModel):
 class DecisionSchema(BaseModel):
     status: str  # approved | rejected
     remarks: Optional[str] = None
+
+class CustomLetterCreate(BaseModel):
+    to_role: str
+    content: str
+
+
+class CustomLetterOut(BaseModel):
+    id: int
+    student_id: int
+    receiver_id: int
+    to_role: str
+    content: str
+    status: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class MessageCreate(BaseModel):
+    receiver_id: int
+    content: str
