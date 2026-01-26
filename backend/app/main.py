@@ -1607,3 +1607,84 @@ def get_messages(
     )
 
     return messages 
+
+
+@app.post("/leaves/{leave_id}/reject")
+def reject_leave_request(
+    leave_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    if current_user.role != "hod":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not allowed to reject leave requests",
+        )
+
+    leave = (
+        db.query(LeaveRequest)
+        .filter(LeaveRequest.id == leave_id)
+        .first()
+    )
+
+    if not leave:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Leave request not found",
+        )
+
+    if leave.overall_status != "in_progress":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Leave request already decided",
+        )
+
+    leave.overall_status = "rejected"
+    leave.approver_id = current_user.id
+
+    db.commit()
+
+    return {
+        "message": "Leave request rejected successfully",
+        "rejected_by": current_user.role,
+    }
+
+@app.post("/leaves/{leave_id}/approve")
+def approve_leave_request(
+    leave_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    if current_user.role != "hod":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not allowed to approve leave requests",
+        )
+
+    leave = (
+        db.query(LeaveRequest)
+        .filter(LeaveRequest.id == leave_id)
+        .first()
+    )
+
+    if not leave:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Leave request not found",
+        )
+
+    if leave.overall_status != "in_progress":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Leave request already decided",
+        )
+
+    leave.overall_status = "approved"
+    leave.approver_id = current_user.id
+
+    db.commit()
+
+    return {
+        "message": "Leave request approved successfully",
+        "approved_by": current_user.role,
+    }

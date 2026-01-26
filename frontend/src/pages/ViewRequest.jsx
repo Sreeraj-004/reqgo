@@ -164,7 +164,7 @@ export default function ViewRequest() {
 
   /* ---------------- LEAVE ---------------- */
   if (requestType === "leave") {
-    if (role === "hod" && data.status === "pending") {
+    if (role === "hod" && data.status === "in_progress") {
       return {
         primary: { label: "Approve", action: "approved" },
         secondary: { label: "Reject", action: "rejected" },
@@ -215,8 +215,11 @@ export default function ViewRequest() {
 
   /* ---------------- LEAVE ---------------- */
   if (requestType === "leave") {
-    apiUrl = `http://localhost:8000/leaves/${id}/decision`;
-    payload = { status: action };
+    if (action === "approved") {
+      apiUrl = `http://localhost:8000/leaves/${id}/approve`;
+    } else if (action === "rejected") {
+      apiUrl = `http://localhost:8000/leaves/${id}/reject`;
+    }
   }
 
   /* ---------------- CERTIFICATE ---------------- */
