@@ -194,12 +194,6 @@ export default function ViewRequest() {
 
   /* ---------------- CUSTOM LETTER ---------------- */
   if (requestType === "custom") {
-    if (role !== "student" && data.status === "submitted") {
-      return {
-        primary: { label: "Approve", action: "approved" },
-        secondary: { label: "Reject", action: "rejected" },
-      };
-    }
     return null;
   }
 

@@ -1147,7 +1147,6 @@ def reject_access_request(
 
     return {"message": "Access rejected"}
 
-
 @app.get("/requests", response_model=List[schemas.UnifiedRequestOut])
 def get_all_requests(
     current_user: models.User = Depends(get_current_user),
@@ -1160,7 +1159,6 @@ def get_all_requests(
     # STUDENT
     # =========================
     if role == "student":
-        # Leave
         leaves = (
             db.query(models.LeaveRequest)
             .filter(models.LeaveRequest.student_id == current_user.id)
@@ -1178,7 +1176,6 @@ def get_all_requests(
                 "view_url": f"/leaves/{leave.id}",
             })
 
-        # Certificate
         certificates = (
             db.query(models.CertificateRequest)
             .filter(models.CertificateRequest.student_id == current_user.id)
@@ -1196,29 +1193,10 @@ def get_all_requests(
                 "view_url": f"/certificate-requests/{cert.id}",
             })
 
-        # Custom Letter
-        letters = (
-            db.query(models.CustomLetterRequest)
-            .filter(models.CustomLetterRequest.student_id == current_user.id)
-            .all()
-        )
-
-        for letter in letters:
-            results.append({
-                "id": letter.id,
-                "sender": current_user.name,
-                "type": "Custom Letter",
-                "subject": f"Letter to {letter.to_role}",
-                "created_at": letter.created_at,
-                "overall_status": letter.status,
-                "view_url": f"/custom-letters/{letter.id}",
-            })
-
     # =========================
     # HOD
     # =========================
     elif role == "hod":
-        # Leave (show all for now)
         leaves = db.query(models.LeaveRequest).all()
         for leave in leaves:
             results.append({
@@ -1231,86 +1209,21 @@ def get_all_requests(
                 "view_url": f"/leaves/{leave.id}",
             })
 
-        # Certificate (HOD approvals)
-        certs = (
-            db.query(models.CertificateApproval)
-            .join(models.CertificateRequest)
-            .filter(
-                models.CertificateApproval.approver_role == "hod",
-                models.CertificateApproval.status == "pending",
-            )
-            .all()
-        )
-
-        for approval in certs:
-            cert = approval.request
-            results.append({
-                "id": cert.id,
-                "sender": cert.student.name,
-                "type": "Certificate",
-                "subject": "Certificate Request",
-                "created_at": cert.created_at,
-                "overall_status": cert.overall_status,
-                "view_url": f"/certificate-requests/{cert.id}",
-            })
-
-        # Custom Letter
-        letters = (
-            db.query(models.CustomLetterRequest)
-            .filter(models.CustomLetterRequest.to_role == "hod")
-            .all()
-        )
-
-        for letter in letters:
-            results.append({
-                "id": letter.id,
-                "sender": letter.student.name,
-                "type": "Custom Letter",
-                "subject": f"Letter to {letter.to_role}",
-                "created_at": letter.created_at,
-                "overall_status": letter.status,
-                "view_url": f"/custom-letters/{letter.id}",
-            })
-
-    # =========================
-    # VICE PRINCIPAL
-    # =========================
-    elif role == "vice_principal":
-        letters = (
-            db.query(models.CustomLetterRequest)
-            .filter(models.CustomLetterRequest.to_role == "vice_principal")
-            .all()
-        )
-
-        for letter in letters:
-            results.append({
-                "id": letter.id,
-                "sender": letter.student.name,
-                "type": "Custom Letter",
-                "subject": f"Letter to {letter.to_role}",
-                "created_at": letter.created_at,
-                "overall_status": letter.status,
-                "view_url": f"/custom-letters/{letter.id}",
-            })
-
     # =========================
     # PRINCIPAL
     # =========================
     elif role == "principal":
-        # Certificate
         certs = (
-            db.query(models.CertificateApproval)
-            .join(models.CertificateRequest)
+            db.query(models.CertificateRequest)
             .filter(
-                # models.CertificateApproval.approver_role == "principal",
-                # models.CertificateApproval.status.in_(["pending", "forwarded"]),
-                models.CertificateRequest.overall_status.in_(["approved", "forwarded","rejected"]),
+                models.CertificateRequest.overall_status.in_(
+                    ["approved", "forwarded", "rejected"]
+                )
             )
             .all()
         )
 
-        for approval in certs:
-            cert = approval.request
+        for cert in certs:
             results.append({
                 "id": cert.id,
                 "sender": cert.student.name,
@@ -1321,30 +1234,36 @@ def get_all_requests(
                 "view_url": f"/certificate-requests/{cert.id}",
             })
 
-        # Custom Letter
-        letters = (
-            db.query(models.CustomLetterRequest)
-            .filter(models.CustomLetterRequest.to_role == "principal")
-            .all()
+    # =========================
+    # CUSTOM LETTERS (UNIFIED)
+    # =========================
+    letters = (
+        db.query(models.CustomLetterRequest)
+        .filter(
+            or_(
+                models.CustomLetterRequest.student_id == current_user.id,
+                models.CustomLetterRequest.receiver_id == current_user.id,
+            )
         )
+        .all()
+    )
 
-        for letter in letters:
-            results.append({
-                "id": letter.id,
-                "sender": letter.student.name,
-                "type": "Custom Letter",
-                "subject": f"Letter to {letter.to_role}",
-                "created_at": letter.created_at,
-                "overall_status": letter.status,
-                "view_url": f"/custom-letters/{letter.id}",
-            })
+    for letter in letters:
+        results.append({
+            "id": letter.id,
+            "sender": letter.student.name,
+            "type": "Custom Letter",
+            "subject": f"Letter to {letter.to_role}",
+            "created_at": letter.created_at,
+            "overall_status": letter.status,
+            "view_url": f"/custom-letters/{letter.id}",
+        })
 
     # =========================
     # SORT
     # =========================
     results.sort(key=lambda x: x["created_at"], reverse=True)
     return results
-
 
 @app.get("/certificate-requests/{request_id}")
 def get_certificate_request(
