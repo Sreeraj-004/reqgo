@@ -970,12 +970,14 @@ def get_custom_letter(
 @app.post("/certificate-requests/{request_id}/approve")
 def approve_certificate_request(
     request_id: int,
-    remarks: str | None = None,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
+    current_user=Depends(get_current_user),
 ):
     if current_user.role != "principal":
-        raise HTTPException(403, "Only Principal can approve certificate requests")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not allowed to approve certificate requests",
+        )
 
     cert_request = (
         db.query(models.CertificateRequest)
@@ -984,32 +986,22 @@ def approve_certificate_request(
     )
 
     if not cert_request:
-        raise HTTPException(404, "Certificate request not found")
-
-    approval = (
-        db.query(models.CertificateApproval)
-        .filter(
-            models.CertificateApproval.request_id == request_id,
-            models.CertificateApproval.approver_id == current_user.id,
-            models.CertificateApproval.status == "pending",
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Certificate request not found",
         )
-        .first()
-    )
 
-    if not approval:
-        raise HTTPException(409, "No pending approval found for principal")
 
-    # Update approval
-    approval.status = "approved"
-    approval.remarks = remarks
-    approval.acted_at = datetime.utcnow()
 
-    # Final status update
     cert_request.overall_status = "approved"
+    cert_request.approved_by = current_user.id
 
     db.commit()
 
-    return {"message": "Certificate request approved successfully"}
+    return {
+        "message": "Certificate request approved successfully",
+        "approved_by": current_user.role,
+    }
 
 #edit - college - get
 @app.get("/colleges/by-principal/{principal_id}")
