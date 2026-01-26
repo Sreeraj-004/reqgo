@@ -11,6 +11,15 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from app.services.message_service import send_system_message
 from sqlalchemy import or_, and_
+from fastapi.staticfiles import StaticFiles
+import os
+from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
+from fastapi import File, UploadFile
+import uuid
+from sqlalchemy.orm import joinedload
+
+
 
 
 from . import models, schemas
@@ -43,6 +52,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+os.makedirs("uploads/signatures", exist_ok=True)
+
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
@@ -507,15 +520,28 @@ def hod_dashboard_leaves(
 
 
 @app.get("/leaves/{leave_id}", response_model=schemas.LeaveOut)
-def get_leave_request(leave_id: int, db: Session = Depends(get_db)):
-    leave = db.query(models.LeaveRequest).filter(models.LeaveRequest.id == leave_id).first()
+def get_leave_request(
+    leave_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    leave = (
+        db.query(models.LeaveRequest)
+        .options(
+            joinedload(models.LeaveRequest.student),
+            joinedload(models.LeaveRequest.hod),   # 🔑 THIS FIXES IT
+        )
+        .filter(models.LeaveRequest.id == leave_id)
+        .first()
+    )
+
     if not leave:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Leave request not found",
         )
-    return leave
 
+    return leave
 
 @app.put("/leaves/{leave_id}/status", response_model=schemas.LeaveOut)
 def update_leave_status(
@@ -1154,6 +1180,7 @@ def get_all_requests(
 ):
     results = []
     role = current_user.role
+    user_id = current_user.id
 
     # =========================
     # STUDENT
@@ -1161,7 +1188,7 @@ def get_all_requests(
     if role == "student":
         leaves = (
             db.query(models.LeaveRequest)
-            .filter(models.LeaveRequest.student_id == current_user.id)
+            .filter(models.LeaveRequest.student_id == user_id)
             .all()
         )
 
@@ -1178,7 +1205,7 @@ def get_all_requests(
 
         certificates = (
             db.query(models.CertificateRequest)
-            .filter(models.CertificateRequest.student_id == current_user.id)
+            .filter(models.CertificateRequest.student_id == user_id)
             .all()
         )
 
@@ -1193,11 +1220,33 @@ def get_all_requests(
                 "view_url": f"/certificate-requests/{cert.id}",
             })
 
+        letters = (
+            db.query(models.CustomLetterRequest)
+            .filter(models.CustomLetterRequest.student_id == user_id)
+            .all()
+        )
+
+        for letter in letters:
+            results.append({
+                "id": letter.id,
+                "sender": letter.student.name,
+                "type": "Custom Letter",
+                "subject": f"Letter to {letter.to_role}",
+                "created_at": letter.created_at,
+                "overall_status": letter.status,
+                "view_url": f"/custom-letters/{letter.id}",
+            })
+
     # =========================
     # HOD
     # =========================
     elif role == "hod":
-        leaves = db.query(models.LeaveRequest).all()
+        leaves = (
+            db.query(models.LeaveRequest)
+            .filter(models.LeaveRequest.hod_id == user_id)
+            .all()
+        )
+
         for leave in leaves:
             results.append({
                 "id": leave.id,
@@ -1209,21 +1258,13 @@ def get_all_requests(
                 "view_url": f"/leaves/{leave.id}",
             })
 
-    # =========================
-    # PRINCIPAL
-    # =========================
-    elif role == "principal":
-        certs = (
+        certificates = (
             db.query(models.CertificateRequest)
-            .filter(
-                models.CertificateRequest.overall_status.in_(
-                    ["approved", "forwarded", "rejected"]
-                )
-            )
+            .filter(models.CertificateRequest.hod_id == user_id)
             .all()
         )
 
-        for cert in certs:
+        for cert in certificates:
             results.append({
                 "id": cert.id,
                 "sender": cert.student.name,
@@ -1234,33 +1275,84 @@ def get_all_requests(
                 "view_url": f"/certificate-requests/{cert.id}",
             })
 
-    # =========================
-    # CUSTOM LETTERS (UNIFIED)
-    # =========================
-    letters = (
-        db.query(models.CustomLetterRequest)
-        .filter(
-            or_(
-                models.CustomLetterRequest.student_id == current_user.id,
-                models.CustomLetterRequest.receiver_id == current_user.id,
-            )
+        letters = (
+            db.query(models.CustomLetterRequest)
+            .filter(models.CustomLetterRequest.receiver_id == user_id)
+            .all()
         )
-        .all()
-    )
 
-    for letter in letters:
-        results.append({
-            "id": letter.id,
-            "sender": letter.student.name,
-            "type": "Custom Letter",
-            "subject": f"Letter to {letter.to_role}",
-            "created_at": letter.created_at,
-            "overall_status": letter.status,
-            "view_url": f"/custom-letters/{letter.id}",
-        })
+        for letter in letters:
+            results.append({
+                "id": letter.id,
+                "sender": letter.student.name,
+                "type": "Custom Letter",
+                "subject": f"Letter to {letter.to_role}",
+                "created_at": letter.created_at,
+                "overall_status": letter.status,
+                "view_url": f"/custom-letters/{letter.id}",
+            })
 
     # =========================
-    # SORT
+    # PRINCIPAL
+    # =========================
+    elif role == "principal":
+        certificates = (
+            db.query(models.CertificateRequest)
+            .filter(models.CertificateRequest.principal_id == user_id)
+            .all()
+        )
+
+        for cert in certificates:
+            results.append({
+                "id": cert.id,
+                "sender": cert.student.name,
+                "type": "Certificate",
+                "subject": "Certificate Request",
+                "created_at": cert.created_at,
+                "overall_status": cert.overall_status,
+                "view_url": f"/certificate-requests/{cert.id}",
+            })
+
+        letters = (
+            db.query(models.CustomLetterRequest)
+            .filter(models.CustomLetterRequest.receiver_id == user_id)
+            .all()
+        )
+
+        for letter in letters:
+            results.append({
+                "id": letter.id,
+                "sender": letter.student.name,
+                "type": "Custom Letter",
+                "subject": f"Letter to {letter.to_role}",
+                "created_at": letter.created_at,
+                "overall_status": letter.status,
+                "view_url": f"/custom-letters/{letter.id}",
+            })
+
+    # =========================
+    # VICE PRINCIPAL
+    # =========================
+    elif role == "vice_principal":
+        letters = (
+            db.query(models.CustomLetterRequest)
+            .filter(models.CustomLetterRequest.receiver_id == user_id)
+            .all()
+        )
+
+        for letter in letters:
+            results.append({
+                "id": letter.id,
+                "sender": letter.student.name,
+                "type": "Custom Letter",
+                "subject": f"Letter to {letter.to_role}",
+                "created_at": letter.created_at,
+                "overall_status": letter.status,
+                "view_url": f"/custom-letters/{letter.id}",
+            })
+
+    # =========================
+    # SORT (Newest first)
     # =========================
     results.sort(key=lambda x: x["created_at"], reverse=True)
     return results
@@ -1273,6 +1365,12 @@ def get_certificate_request(
 ):
     request = (
         db.query(models.CertificateRequest)
+        .options(
+            joinedload(models.CertificateRequest.student),
+            joinedload(models.CertificateRequest.hod),
+            joinedload(models.CertificateRequest.principal),
+            joinedload(models.CertificateRequest.approvals),
+        )
         .filter(models.CertificateRequest.id == request_id)
         .first()
     )
@@ -1283,15 +1381,14 @@ def get_certificate_request(
     return {
         "id": request.id,
 
-        # ✅ IDs REQUIRED FOR MESSAGE ROUTING
+        # IDs for routing
         "student_id": request.student_id,
         "hod_id": request.hod_id,
         "principal_id": request.principal_id,
 
-        "type": "Certificate",
         "student": {
             "name": request.student.name,
-            "department": request.student.department_name,
+            "department_name": request.student.department_name,
         },
 
         "certificates": request.certificates.split(","),
@@ -1299,11 +1396,22 @@ def get_certificate_request(
         "overall_status": request.overall_status,
         "created_at": request.created_at,
 
+        # 🔥 SIGNERS (THIS FIXES EVERYTHING)
+        "hod": {
+            "name": request.hod.name,
+            "signature_path": request.hod.signature_path,
+        } if request.hod else None,
+
+        "principal": {
+            "name": request.principal.name,
+            "signature_path": request.principal.signature_path,
+        } if request.principal else None,
+
+        # Optional: approval audit trail
         "approvals": [
             {
                 "role": a.approver_role,
                 "status": a.status,
-                "remarks": a.remarks,
                 "acted_at": a.acted_at,
             }
             for a in request.approvals
@@ -1599,3 +1707,33 @@ def approve_leave_request(
         "message": "Leave request approved successfully",
         "approved_by": current_user.role,
     }
+
+
+@app.post("/users/upload-signature")
+def upload_signature(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+
+    if file.content_type not in ["image/png", "image/jpeg"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only PNG or JPG images are allowed",
+        )
+
+    upload_dir = "uploads/signatures"
+    os.makedirs(upload_dir, exist_ok=True)
+
+    file_ext = file.filename.split(".")[-1]
+    filename = f"{uuid.uuid4()}.{file_ext}"
+    file_path = os.path.join(upload_dir, filename)
+
+    with open(file_path, "wb") as buffer:
+        buffer.write(file.file.read())
+
+    current_user.signature_path = file_path
+    db.commit()
+    db.refresh(current_user)
+
+    return {"message": "Signature uploaded successfully"}

@@ -1,4 +1,6 @@
 export default function LetterPreview({ data }) {
+  const isApproved = data?.status === "approved";
+
   return (
     <div
       className="
@@ -50,9 +52,32 @@ export default function LetterPreview({ data }) {
             </p>
           </div>
 
-          {/* FOOTNOTE — ONLY FOR LEAVE */}
+          {/* SIGNATURE BLOCK — ONLY IF APPROVED */}
+          {isApproved && data.hodSignature && (
+            <div className="mt-6 pt-4 border-t text-sm">
+              <p className="font-medium text-gray-700 mb-2">
+                Approved by
+              </p>
+
+              <img
+                src={data.hodSignature}
+                alt="HOD Signature"
+                crossOrigin="anonymous" 
+                className="h-12 object-contain mb-1"
+              />
+
+              <p className="text-xs text-gray-600">
+                {data.hodName}
+              </p>
+              <p className="text-xs text-gray-500">
+                Head of Department
+              </p>
+            </div>
+          )}
+
+          {/* FOOTNOTE */}
           {data.type === "Leave Request" && (
-            <div className="mt-6 pt-4 border-t text-xs text-gray-500 space-y-1">
+            <div className="mt-4 pt-3 border-t text-xs text-gray-500 space-y-1">
               <p>
                 <span className="font-medium text-gray-700">
                   Approval Required:
@@ -63,7 +88,7 @@ export default function LetterPreview({ data }) {
                 <span className="font-medium text-gray-700">
                   Current Status:
                 </span>{" "}
-                {data?.status ? data.status.replace("_", " ") : "Pending"}
+                {data.status ? data.status.replace("_", " ") : "Pending"}
               </p>
             </div>
           )}

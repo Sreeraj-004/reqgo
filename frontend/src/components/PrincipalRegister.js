@@ -15,6 +15,9 @@ export default function PrincipalRegister() {
   const [existingColleges, setExistingColleges] = useState([]);
   const [isDuplicate, setIsDuplicate] = useState(false);
 
+  const [signatureFile, setSignatureFile] = useState(null);
+  const [loading, setLoading] = useState(false);
+
   useEffect(() => {
     fetch("http://localhost:8000/colleges/")
       .then((res) => res.json())
@@ -29,7 +32,7 @@ export default function PrincipalRegister() {
     if (!value) return;
 
     if (!departments.includes(value)) {
-      setDepartments([...departments, value]);
+      setDepartments((prev) => [...prev, value]);
     }
     setDepartmentInput("");
   };
@@ -42,25 +45,51 @@ export default function PrincipalRegister() {
   };
 
   const removeDepartment = (dept) => {
-    setDepartments(departments.filter((d) => d !== dept));
+    setDepartments((prev) => prev.filter((d) => d !== dept));
+  };
+
+  const uploadSignature = async () => {
+    if (!signatureFile) {
+      throw new Error("Signature file is required");
+    }
+
+    const token = localStorage.getItem("token");
+    const formData = new FormData();
+    formData.append("file", signatureFile);
+
+    const res = await fetch("http://localhost:8000/users/upload-signature", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      body: formData,
+    });
+
+    if (!res.ok) {
+      const data = await res.json();
+      throw new Error(data.detail || "Signature upload failed");
+    }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
-    const user = JSON.parse(localStorage.getItem("user"));
-    const token = localStorage.getItem("token");
-
-    const payload = {
-      principal_id: user.id,
-      college_name: collegeName,
-      address,
-      city,
-      zip_code: zipCode,
-      departments,
-    };
+    setLoading(true);
 
     try {
+      const user = JSON.parse(localStorage.getItem("user"));
+      const token = localStorage.getItem("token");
+
+      await uploadSignature();
+
+      const payload = {
+        principal_id: user.id,
+        college_name: collegeName,
+        address,
+        city,
+        zip_code: zipCode,
+        departments,
+      };
+
       const res = await fetch("http://localhost:8000/colleges/register", {
         method: "POST",
         headers: {
@@ -71,11 +100,16 @@ export default function PrincipalRegister() {
       });
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.detail);
+      if (!res.ok) {
+        throw new Error(data.detail || "College registration failed");
+      }
 
       navigate("/dashboard");
     } catch (err) {
       console.error(err.message);
+      alert(err.message);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -96,6 +130,7 @@ export default function PrincipalRegister() {
             setIsDuplicate(existingColleges.includes(value.trim().toLowerCase()));
           }}
           className="w-full rounded-lg border px-4 py-2.5"
+          required
         />
 
         <input
@@ -103,6 +138,7 @@ export default function PrincipalRegister() {
           value={address}
           onChange={(e) => setAddress(e.target.value)}
           className="w-full rounded-lg border px-4 py-2.5"
+          required
         />
 
         <div className="grid grid-cols-2 gap-3">
@@ -111,16 +147,17 @@ export default function PrincipalRegister() {
             value={city}
             onChange={(e) => setCity(e.target.value)}
             className="rounded-lg border px-4 py-2.5"
+            required
           />
           <input
             placeholder="Zip code"
             value={zipCode}
             onChange={(e) => setZipCode(e.target.value)}
             className="rounded-lg border px-4 py-2.5"
+            required
           />
         </div>
 
-        {/* Departments */}
         <div>
           <p className="text-sm font-medium mb-2">Departments</p>
 
@@ -160,12 +197,23 @@ export default function PrincipalRegister() {
           </div>
         </div>
 
+        <div>
+          <p className="text-sm font-medium mb-2">Principal Signature</p>
+          <input
+            type="file"
+            accept="image/png, image/jpeg"
+            onChange={(e) => setSignatureFile(e.target.files[0])}
+            className="w-full rounded-lg border px-4 py-2.5"
+            required
+          />
+        </div>
+
         <button
           type="submit"
-          disabled={isDuplicate}
+          disabled={isDuplicate || loading}
           className="w-full rounded-lg py-2.5 bg-black text-white disabled:opacity-40"
         >
-          Register College
+          {loading ? "Submitting..." : "Register College"}
         </button>
       </form>
     </div>

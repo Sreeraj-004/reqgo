@@ -113,6 +113,11 @@ export default function ViewRequest() {
             toDate: resData.to_date,
             reason: resData.reason,
             status: resData.overall_status,
+
+            hodName: resData.hod?.name || "HOD",
+            hodSignature: resData.hod?.signature_path
+              ? `http://localhost:8000/${resData.hod.signature_path}`
+              : null,
           });
         }
 
@@ -126,10 +131,21 @@ export default function ViewRequest() {
             studentName: resData.student?.name,
             department: resData.student?.department_name,
             certificates: resData.certificates,
-            purpose: resData.purpose,
+            certificatePurpose: resData.purpose,
             status: resData.overall_status,
+
+            hodName: resData.hod?.name || "HOD",
+            hodSignature: resData.hod?.signature_path
+              ? `http://localhost:8000/${resData.hod.signature_path}`
+              : null,
+
+            principalName: resData.principal?.name || "Principal",
+            principalSignature: resData.principal?.signature_path
+              ? `http://localhost:8000/${resData.principal.signature_path}`
+              : null,
           });
         }
+
 
 
         if (requestType === "custom") {
@@ -272,12 +288,21 @@ export default function ViewRequest() {
         margin: 15,
         filename,
         image: { type: "jpeg", quality: 0.98 },
-        html2canvas: { scale: 2 },
-        jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+        html2canvas: {
+          scale: 2,
+          useCORS: true,       
+          allowTaint: true,   
+        },
+        jsPDF: {
+          unit: "mm",
+          format: "a4",
+          orientation: "portrait",
+        },
       })
       .from(previewRef.current)
       .save();
   };
+
 
   const currentUrl = window.location.href;
 

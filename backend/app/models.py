@@ -16,6 +16,8 @@ class User(Base):
     department_name = Column(String(255), nullable=True)
     access_status = Column(String(20), nullable=False, default="pending")
 
+    signature_path = Column(String(255), nullable=True)
+
     # ======================
     # LEAVE RELATIONSHIPS
     # ======================
@@ -107,6 +109,11 @@ class LeaveRequest(Base):
         "User",
         foreign_keys=[student_id],
         back_populates="leave_requests",
+    )
+    
+    hod = relationship(
+        "User",
+        foreign_keys=[hod_id],
     )
 
     approvals = relationship(
@@ -224,6 +231,16 @@ class CertificateRequest(Base):
         back_populates="request",
         cascade="all, delete-orphan",
         order_by="CertificateApproval.id",
+    )
+
+    hod = relationship(
+        "User",
+        foreign_keys=[hod_id],
+    )
+
+    principal = relationship(
+        "User",
+        foreign_keys=[principal_id],
     )
 
 class CertificateApproval(Base):

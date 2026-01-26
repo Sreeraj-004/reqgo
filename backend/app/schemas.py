@@ -47,6 +47,60 @@ class AuthResponse(BaseModel):
     user: UserProfile
 
 
+class StudentOut(BaseModel):
+    name: str
+    department_name: str | None = None
+
+    model_config = {
+        "from_attributes": True
+    }
+
+class UserSignatureOut(BaseModel):
+    name: str
+    signature_path: str | None = None
+
+    model_config = {
+        "from_attributes": True
+    }
+class LeaveOut(BaseModel):
+    id: int
+    student_id: int
+    hod_id: int
+
+    from_date: date
+    to_date: date
+    reason: str | None
+    overall_status: str
+    created_at: datetime
+
+    student: StudentOut
+    hod: UserSignatureOut | None   # 🔥 THIS MUST EXIST
+
+    model_config = {
+        "from_attributes": True
+    }
+
+
+class LeaveRequestOut(BaseModel):
+    id: int
+    student_id: int
+    hod_id: int
+
+    from_date: date
+    to_date: date
+    reason: str | None
+    overall_status: str
+
+    student: StudentOut
+    hod: UserSignatureOut | None
+
+    created_at: datetime
+
+    model_config = {
+        "from_attributes": True
+    }
+
+
 class LeaveBase(BaseModel):
     leave_type: str  # emergency, medical, personal, wedding
     subject: str
@@ -67,23 +121,6 @@ class LeaveUpdateStatus(BaseModel):
     status: str  # approved or rejected
     approver_id: int  # the user who approves/rejects
 
-
-class LeaveOut(BaseModel):
-    id: int
-    leave_type: str
-    subject: str
-    student_id: int
-    hod_id: int
-    reason: Optional[str]
-    from_date: date
-    to_date: date
-    overall_status: str
-    created_at: datetime
-
-    student: UserBasic
-
-    class Config:
-        orm_mode = True
 
 class UserMini(BaseModel):
     name: str
@@ -257,3 +294,35 @@ class CustomLetterOut(BaseModel):
 class MessageCreate(BaseModel):
     receiver_id: int
     content: str
+
+class UserSignatureOut(BaseModel):
+    name: str
+    signature_path: str | None = None
+
+    model_config = {
+        "from_attributes": True
+    }
+
+class UserSignatureOut(BaseModel):
+    id: int
+    name: str
+    signature_path: str | None
+
+    model_config = {"from_attributes": True}
+
+class CertificateRequestOut(BaseModel):
+    id: int
+    student_id: int
+    hod_id: int
+    principal_id: int
+    certificates: str
+    purpose: str | None
+    overall_status: str
+
+    student: StudentOut
+    hod: UserSignatureOut | None
+    principal: UserSignatureOut | None
+
+    created_at: datetime
+
+    model_config = {"from_attributes": True}

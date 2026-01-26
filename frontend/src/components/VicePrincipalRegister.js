@@ -8,15 +8,16 @@ export default function VicePrincipalRegister() {
   const [filteredColleges, setFilteredColleges] = useState([]);
   const [selectedCollege, setSelectedCollege] = useState(null);
 
-  // 🔥 Fetch colleges
+  const [signatureFile, setSignatureFile] = useState(null);
+  const [loading, setLoading] = useState(false);
+
   useEffect(() => {
     fetch("http://localhost:8000/colleges/")
-      .then(res => res.json())
-      .then(data => setColleges(data))
+      .then((res) => res.json())
+      .then((data) => setColleges(data))
       .catch(() => console.error("Failed to load colleges"));
   }, []);
 
-  // 🔍 Filter while typing
   const handleInputChange = (e) => {
     const value = e.target.value;
     setCollegeInput(value);
@@ -27,7 +28,7 @@ export default function VicePrincipalRegister() {
       return;
     }
 
-    const matches = colleges.filter(c =>
+    const matches = colleges.filter((c) =>
       c.name.toLowerCase().includes(value.toLowerCase())
     );
 
@@ -40,44 +41,68 @@ export default function VicePrincipalRegister() {
     setFilteredColleges([]);
   };
 
-  const handleSendRequest = async () => {
-  if (!selectedCollege) return;
+  const uploadSignature = async () => {
+    if (!signatureFile) {
+      throw new Error("Signature file is required");
+    }
 
-  const user = JSON.parse(localStorage.getItem("user"));
-  const token = localStorage.getItem("token");
+    const token = localStorage.getItem("token");
+    const formData = new FormData();
+    formData.append("file", signatureFile);
 
-  try {
-    const res = await fetch("http://localhost:8000/access/vice-principal", {
+    const res = await fetch("http://localhost:8000/users/upload-signature", {
       method: "POST",
       headers: {
-        "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify({
-        user_id: user.id,
-        college_name: selectedCollege.name,
-      }),
+      body: formData,
     });
 
     if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.detail || "Request failed");
+      const data = await res.json();
+      throw new Error(data.detail || "Signature upload failed");
     }
+  };
 
-    setShowModal(true);
-  } catch (err) {
-    console.error("Access request failed:", err.message);
-    alert("Failed to send request");
-  }
-};
+  const handleSendRequest = async () => {
+    if (!selectedCollege) return;
+    setLoading(true);
 
+    const user = JSON.parse(localStorage.getItem("user"));
+    const token = localStorage.getItem("token");
+
+    try {
+      await uploadSignature();
+
+      const res = await fetch("http://localhost:8000/access/vice-principal", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          user_id: user.id,
+          college_name: selectedCollege.name,
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.detail || "Request failed");
+      }
+
+      setShowModal(true);
+    } catch (err) {
+      console.error("Access request failed:", err.message);
+      alert(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <>
-      {/* Main Card */}
       <div className="w-full max-w-md rounded-2xl bg-white/80 backdrop-blur-xl shadow-xl p-8">
-
-        {/* Header */}
         <div className="text-center mb-6">
           <h1 className="text-2xl font-semibold">Vice Principal Access</h1>
           <p className="text-sm text-gray-500 mt-1">
@@ -85,23 +110,18 @@ export default function VicePrincipalRegister() {
           </p>
         </div>
 
-        {/* Form */}
         <form className="space-y-4 relative">
-
-          {/* College Input */}
           <input
             type="text"
             placeholder="College name"
             value={collegeInput}
             onChange={handleInputChange}
-            className="w-full rounded-lg border border-gray-300 px-4 py-2.5
-                       focus:outline-none focus:ring-2 focus:ring-gray-400"
+            className="w-full rounded-lg border px-4 py-2.5"
           />
 
-          {/* Suggestions */}
           {filteredColleges.length > 0 && (
             <div className="absolute z-10 w-full bg-white border rounded-lg shadow-md max-h-40 overflow-y-auto">
-              {filteredColleges.map(college => (
+              {filteredColleges.map((college) => (
                 <div
                   key={college.id}
                   onClick={() => handleSelectCollege(college)}
@@ -113,25 +133,30 @@ export default function VicePrincipalRegister() {
             </div>
           )}
 
-          {/* SEND REQUEST */}
+          <div>
+            <p className="text-sm font-medium mb-2">Vice Principal Signature</p>
+            <input
+              type="file"
+              accept="image/png, image/jpeg"
+              onChange={(e) => setSignatureFile(e.target.files[0])}
+              className="w-full rounded-lg border px-4 py-2.5"
+              required
+            />
+          </div>
+
           <button
             type="button"
             onClick={handleSendRequest}
-            disabled={!selectedCollege}
-            className="w-full rounded-lg py-2.5 font-medium
-                       bg-black text-white
-                       hover:opacity-90 transition
-                       disabled:opacity-40 disabled:cursor-not-allowed"
+            disabled={!selectedCollege || loading}
+            className="w-full rounded-lg py-2.5 bg-black text-white disabled:opacity-40"
           >
-            Send Request
+            {loading ? "Sending..." : "Send Request"}
           </button>
         </form>
       </div>
 
-      {/* MODAL */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
-
           <div
             className="absolute inset-0 bg-black/50"
             onClick={() => setShowModal(false)}
@@ -142,32 +167,23 @@ export default function VicePrincipalRegister() {
               Request Sent
             </h2>
 
-            <p className="text-sm text-gray-600 text-center leading-relaxed">
+            <p className="text-sm text-gray-600 text-center">
               Your request has been sent to the Principal.
-              <br />
-              You’ll get access once approved.
             </p>
 
             <p className="text-sm text-gray-500 text-center mt-4">
-              For queries, contact:
-              <br />
               <span className="font-medium text-black">
-                <p className="text-sm text-gray-500 text-center mt-4">
-                  <span className="font-medium text-black">
-                    {selectedCollege?.principal_name}
-                  </span>
-                  <br />
-                  <span className="text-gray-600 text-sm">
-                    {selectedCollege?.principal_email}
-                  </span>
-                </p>
+                {selectedCollege?.principal_name}
+              </span>
+              <br />
+              <span className="text-gray-600 text-sm">
+                {selectedCollege?.principal_email}
               </span>
             </p>
 
             <button
               onClick={() => setShowModal(false)}
-              className="mt-6 w-full rounded-lg py-2.5 font-medium
-                         bg-black text-white hover:opacity-90 transition"
+              className="mt-6 w-full rounded-lg py-2.5 bg-black text-white"
             >
               Close
             </button>
