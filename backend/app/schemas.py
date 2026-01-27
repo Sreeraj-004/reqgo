@@ -326,3 +326,15 @@ class CertificateRequestOut(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class CertificateCreateOut(BaseModel):
+    id: int
+    student_id: int
+    certificates: List[str]
+    purpose: Optional[str]
+    overall_status: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True

@@ -96,7 +96,8 @@ export default function CertificatePreview({ data }) {
         </p>
         <p>
           <span className="font-medium text-gray-700">Current Status:</span>{" "}
-          {data.status.replace("_", " ")}
+          {(data.status || data.overall_status || "")
+            .replace("_", " ")}
         </p>
       </div>
     </div>

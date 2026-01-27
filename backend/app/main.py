@@ -19,6 +19,9 @@ from fastapi import File, UploadFile
 import uuid
 from sqlalchemy.orm import joinedload
 
+from .websocket.notifications import manager, get_current_user_ws
+from fastapi import WebSocket, WebSocketDisconnect
+from .config import JWT_SECRET_KEY, JWT_ALGORITHM, JWT_EXPIRE_MINUTES
 
 
 
@@ -38,10 +41,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-# In production, read these from environment variables instead of hardcoding.
-JWT_SECRET_KEY = "CHANGE_THIS_SECRET_KEY_IN_PRODUCTION"
-JWT_ALGORITHM = "HS256"
-JWT_EXPIRE_MINUTES = 60
+
 
 app = FastAPI(title="College Management & Leave API")
 
@@ -364,7 +364,7 @@ def login(credentials: schemas.LoginRequest, db: Session = Depends(get_db)):
 
 
 @app.post("/leaves/", response_model=schemas.LeaveOut, status_code=201)
-def create_leave_request(
+async def create_leave_request(
     leave_in: schemas.LeaveCreate,
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -419,6 +419,18 @@ def create_leave_request(
     db.add(leave)
     db.commit()
     db.refresh(leave)
+
+    await manager.notify(
+        hod.id,
+        {
+            "title": "New Leave Request",
+            "message": f"{current_user.name} submitted a leave request",
+            "type": "LEAVE_CREATED",
+            "leave_id": leave.id,
+        }
+    )
+
+
     request_link = f"/leaves/{leave.id}"
 
     send_system_message(
@@ -767,10 +779,11 @@ def render_leave_body(
 
 @app.post(
     "/certificate-requests",
-    response_model=schemas.CertificateRequestOut,
+    response_model=schemas.CertificateCreateOut,
+
     status_code=201,
 )
-def create_certificate_request(
+async def create_certificate_request(
     data: schemas.CertificateRequestCreate,
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -873,24 +886,31 @@ def create_certificate_request(
     db.add(approval)
     db.commit()
 
-    # ✅ Explicit response (stable & predictable)
-    return schemas.CertificateRequestOut(
-        id=request.id,
-        student_id=request.student_id,
-        hod_id=request.hod_id,
-        principal_id=request.principal_id,
-        certificates=request.certificates.split(","),
-        purpose=request.purpose,
-        overall_status=request.overall_status,
-        created_at=request.created_at,
+    await manager.notify(
+        hod.id,
+        {
+            "title": "New Certificate Request",
+            "message": f"{current_user.name} submitted a certificate request",
+            "type": "CERTIFICATE_CREATED",
+            "request_id": request.id,
+        }
     )
+
+    return schemas.CertificateCreateOut(
+    id=request.id,
+    student_id=request.student_id,
+    certificates=request.certificates.split(","),
+    purpose=request.purpose,
+    overall_status=request.overall_status,
+    created_at=request.created_at,
+)
 
 @app.post(
     "/custom-letters",
     response_model=schemas.CustomLetterOut,
     status_code=201,
 )
-def create_custom_letter(
+async def create_custom_letter(
     data: schemas.CustomLetterCreate,
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -941,6 +961,15 @@ def create_custom_letter(
     db.add(letter)
     db.commit()
     db.refresh(letter)
+    await manager.notify(
+        receiver.id,
+        {
+            "title": "New Request Letter",
+            "message": f"{current_user.name} sent you a request letter",
+            "type": "CUSTOM_LETTER_CREATED",
+            "letter_id": letter.id,
+        }
+    )
     request_link = f"/custom-letters/{letter.id}"
 
     send_system_message(
@@ -1298,7 +1327,8 @@ def get_all_requests(
     elif role == "principal":
         certificates = (
             db.query(models.CertificateRequest)
-            .filter(models.CertificateRequest.principal_id == user_id)
+            .filter(models.CertificateRequest.principal_id == user_id,
+            models.CertificateRequest.overall_status.in_(["forwarded", "approved"]),)
             .all()
         )
 
@@ -1425,7 +1455,7 @@ class DecisionSchema(BaseModel):
 
 
 @app.post("/certificate-requests/{request_id}/forward")
-def forward_certificate_request(
+async def forward_certificate_request(
     request_id: int,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
@@ -1465,17 +1495,25 @@ def forward_certificate_request(
 
     db.add(hod_approval)
     db.commit()
+    await manager.notify(
+        cert_request.principal_id,
+        {
+            "title": "Certificate Request Forwarded",
+            "message": f"{current_user.name} forwarded a certificate request for approval",
+            "type": "CERTIFICATE_FORWARDED",
+            "request_id": cert_request.id,
+        }
+    )
 
     return {"message": "Certificate forwarded successfully"}
 
 
 @app.post("/certificate-requests/{request_id}/reject")
-def reject_certificate_request(
+async def reject_certificate_request(
     request_id: int,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    # Only allowed roles
     if current_user.role not in ["hod", "principal"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -1494,21 +1532,41 @@ def reject_certificate_request(
             detail="Certificate request not found",
         )
 
-
     approval = (
         db.query(models.CertificateApproval)
         .filter(
             models.CertificateApproval.request_id == request_id,
             models.CertificateApproval.approver_role == current_user.role,
+            models.CertificateApproval.approver_id == current_user.id,
         )
         .first()
     )
 
+    if not approval:
+        raise HTTPException(
+            status_code=400,
+            detail="Approval record not found for this user",
+        )
 
-    # Terminal state
+
+    approval.status = "rejected"
+    approval.acted_at = datetime.utcnow()
     cert_request.overall_status = "rejected"
 
     db.commit()
+    print("ACTIVE WS CONNECTIONS:", manager.active_connections.keys())
+    print("CERT REQUEST STUDENT ID:", cert_request.student_id)
+
+    # 🔔 Notify Student
+    await manager.notify(
+        cert_request.student_id,
+        {
+            "title": "Certificate Request Rejected",
+            "message": "Your certificate request was rejected",
+            "type": "CERTIFICATE_REJECTED",
+            "request_id": cert_request.id,
+        }
+    )
 
     return {
         "message": "Certificate request rejected successfully",
@@ -1624,12 +1682,13 @@ def get_messages(
         .order_by(models.Message.created_at)
         .all()
     )
+    
 
     return messages 
 
 
 @app.post("/leaves/{leave_id}/reject")
-def reject_leave_request(
+async def reject_leave_request(
     leave_id: int,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
@@ -1662,6 +1721,15 @@ def reject_leave_request(
     leave.approver_id = current_user.id
 
     db.commit()
+    await manager.notify(
+        leave.student_id,
+        {
+            "title": "Leave Request Rejected",
+            "message": "Your leave request has been rejected by the HOD",
+            "type": "LEAVE_REJECTED",
+            "request_id": leave.id,
+        }
+    )
 
     return {
         "message": "Leave request rejected successfully",
@@ -1669,7 +1737,7 @@ def reject_leave_request(
     }
 
 @app.post("/leaves/{leave_id}/approve")
-def approve_leave_request(
+async def approve_leave_request(
     leave_id: int,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
@@ -1702,6 +1770,15 @@ def approve_leave_request(
     leave.approver_id = current_user.id
 
     db.commit()
+    await manager.notify(
+        leave.student_id,
+        {
+            "title": "Leave Request Approved",
+            "message": "Your leave request has been approved by the HOD",
+            "type": "LEAVE_APPROVED",
+            "request_id": leave.id,
+        }
+    )
 
     return {
         "message": "Leave request approved successfully",
@@ -1737,3 +1814,30 @@ def upload_signature(
     db.refresh(current_user)
 
     return {"message": "Signature uploaded successfully"}
+
+@app.websocket("/ws/notifications")
+async def websocket_notifications(
+    websocket: WebSocket,
+    db: Session = Depends(get_db),
+):
+    current_user = get_current_user_ws(websocket, db)
+
+    await manager.connect(current_user.id, websocket)
+
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        manager.disconnect(current_user.id)
+
+
+@app.get("/test-ws")
+async def test_ws(current_user=Depends(get_current_user)):
+    await manager.notify(
+        current_user.id,
+        {
+            "title": "WS Test",
+            "message": "If you see this, it works",
+        }
+    )
+    return {"ok": True}
