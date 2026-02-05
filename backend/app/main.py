@@ -264,6 +264,56 @@ def request_vice_principal_access(
 
     return user
 
+@app.post(
+    "/access/superintendent",
+    response_model=schemas.UserProfile,
+)
+def request_superintendent_access(
+    data: schemas.SuperintendentAccessRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    Superintendent Access Page:
+    - user selects an existing college
+    - submits a request that will be approved by the Principal
+    """
+
+    # 🔍 Validate user
+    user = db.query(models.User).filter(models.User.id == data.user_id).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+
+    if user.role != "superintendent":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This endpoint is only for superintendents.",
+        )
+
+    # 🔍 Validate college
+    college = (
+        db.query(models.College)
+        .filter(models.College.name == data.college_name)
+        .first()
+    )
+    if not college:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="College does not exist. A Principal must register it first.",
+        )
+
+    # 📝 Update user access state
+    user.college_name = data.college_name
+    user.department_name = None
+    user.access_status = "pending"
+
+    db.commit()
+    db.refresh(user)
+
+    return user
+
 
 @app.post("/access/hod", response_model=schemas.UserProfile)
 def request_hod_access(
@@ -404,11 +454,16 @@ async def create_leave_request(
             status_code=404,
             detail="HOD not found for student's department",
         )
+    
+    if leave_in.reason=="":
+        sub="Leave Request"
+    else:
+        sub=f" Requesting leave due to {leave_in.reason}"
 
     leave = models.LeaveRequest(
         student_id=current_user.id,
         leave_type=leave_in.leave_type,
-        subject=leave_in.subject,
+        subject=sub,
         hod_id=hod.id,
         reason=leave_in.reason,
         from_date=leave_in.from_date,
@@ -541,7 +596,7 @@ def get_leave_request(
         db.query(models.LeaveRequest)
         .options(
             joinedload(models.LeaveRequest.student),
-            joinedload(models.LeaveRequest.hod),   # 🔑 THIS FIXES IT
+            joinedload(models.LeaveRequest.hod),  
         )
         .filter(models.LeaveRequest.id == leave_id)
         .first()
@@ -793,6 +848,11 @@ async def create_certificate_request(
             status_code=403,
             detail="Only students can request certificates",
         )
+    subject = (
+        "Certificate Request"
+        if not data.purpose or not data.purpose.strip()
+        else f"Requesting certificate for {data.purpose.strip()}"
+    )
 
     if not data.certificates or not any(c.strip() for c in data.certificates):
         raise HTTPException(
@@ -829,6 +889,16 @@ async def create_certificate_request(
             status_code=400,
             detail="HOD not found for your department",
         )
+    # 🔍 Find Vice Principal
+    vp = (
+        db.query(models.User)
+        .filter(
+            models.User.role == "vice_principal",
+            models.User.college_name == current_user.college_name,
+            models.User.access_status == "approved",
+        )
+        .first()
+    )
 
     # 🔍 Find Principal
     principal = (
@@ -851,9 +921,11 @@ async def create_certificate_request(
     request = models.CertificateRequest(
         student_id=current_user.id,
         hod_id=hod.id,
+        vp_id=vp.id,
         principal_id=principal.id,
         certificates=",".join(data.certificates),
         purpose=data.purpose,
+        subject=subject,
         overall_status="in_progress",
     )
 
@@ -882,6 +954,14 @@ async def create_certificate_request(
         approver_role="hod",
         status="pending",
     )
+    
+
+    if not vp:
+        raise HTTPException(
+            status_code=400,
+            detail="Vice Principal not found for your college",
+        )
+
 
     db.add(approval)
     db.commit()
@@ -1049,7 +1129,7 @@ def approve_certificate_request(
 
 
     cert_request.overall_status = "approved"
-    cert_request.approved_by = current_user.id
+    cert_request.principal_updated_at = datetime.utcnow()
 
     db.commit()
 
@@ -1105,11 +1185,6 @@ def get_pending_access_requests(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    print(
-    "DEBUG ROLE:", current_user.role,
-    "COLLEGE:", current_user.college_name,
-    "STATUS:", current_user.access_status
-)
     if not current_user.college_name:
         return []
 
@@ -1118,18 +1193,22 @@ def get_pending_access_requests(
         models.User.access_status == "pending",
     )
 
-    role_map = {
-        "principal": "vice_principal",
-        "vice_principal": "hod",
-        "hod": "student",
-    }
+    if current_user.role == "principal":
+        users = base_query.filter(
+            models.User.role.in_(["vice_principal", "superintendent"])
+        ).all()
 
-    target_role = role_map.get(current_user.role)
+    elif current_user.role == "vice_principal":
+        users = base_query.filter(
+            models.User.role.in_(["hod", "superintendent"])
+        ).all()
 
-    if not target_role:
-        return []
+    elif current_user.role == "hod":
+        users = base_query.filter(models.User.role == "student").all()
 
-    users = base_query.filter(models.User.role == target_role).all()
+    else:
+        users = []
+
     return users
 
 @app.post("/access/approve/{user_id}")
@@ -1328,7 +1407,7 @@ def get_all_requests(
         certificates = (
             db.query(models.CertificateRequest)
             .filter(models.CertificateRequest.principal_id == user_id,
-            models.CertificateRequest.overall_status.in_(["forwarded", "approved"]),)
+            models.CertificateRequest.overall_status.in_(["forwarded_to_principal", "approved"]),)
             .all()
         )
 
@@ -1359,7 +1438,41 @@ def get_all_requests(
                 "overall_status": letter.status,
                 "view_url": f"/custom-letters/{letter.id}",
             })
+    elif role == "superintendent":
+        certificates = (
+            db.query(models.CertificateRequest)
+            .filter(
+            models.CertificateRequest.overall_status.in_(["approved","collected","delivery_initiated"]),)
+            .all()
+        )
 
+        for cert in certificates:
+            results.append({
+                "id": cert.id,
+                "sender": cert.student.name,
+                "type": "Certificate",
+                "subject": "Certificate Request",
+                "created_at": cert.created_at,
+                "overall_status": cert.overall_status,
+                "view_url": f"/certificate-requests/{cert.id}",
+            })
+
+        letters = (
+            db.query(models.CustomLetterRequest)
+            .filter(models.CustomLetterRequest.receiver_id == user_id)
+            .all()
+        )
+
+        for letter in letters:
+            results.append({
+                "id": letter.id,
+                "sender": letter.student.name,
+                "type": "Custom Letter",
+                "subject": f"Letter to {letter.to_role}",
+                "created_at": letter.created_at,
+                "overall_status": letter.status,
+                "view_url": f"/custom-letters/{letter.id}",
+            })
     # =========================
     # VICE PRINCIPAL
     # =========================
@@ -1381,6 +1494,24 @@ def get_all_requests(
                 "view_url": f"/custom-letters/{letter.id}",
             })
 
+        certificates = (
+            db.query(models.CertificateRequest)
+            .filter(models.CertificateRequest.vp_id == user_id,
+                    models.CertificateRequest.overall_status.in_(["forwarded_to_vp", "forwarded_to_principal"]),)
+            .all()
+        )
+
+        for cert in certificates:
+            results.append({
+                "id": cert.id,
+                "sender": current_user.name,
+                "type": "Certificate",
+                "subject": "Certificate Request",
+                "created_at": cert.created_at,
+                "overall_status": cert.overall_status,
+                "view_url": f"/certificate-requests/{cert.id}",
+            })
+
     # =========================
     # SORT (Newest first)
     # =========================
@@ -1398,6 +1529,7 @@ def get_certificate_request(
         .options(
             joinedload(models.CertificateRequest.student),
             joinedload(models.CertificateRequest.hod),
+            joinedload(models.CertificateRequest.vp),
             joinedload(models.CertificateRequest.principal),
             joinedload(models.CertificateRequest.approvals),
         )
@@ -1411,33 +1543,72 @@ def get_certificate_request(
     return {
         "id": request.id,
 
-        # IDs for routing
+        # ---- IDs (for routing / messaging) ----
         "student_id": request.student_id,
         "hod_id": request.hod_id,
+        "vp_id": request.vp_id,
         "principal_id": request.principal_id,
 
+        # ---- Student ----
         "student": {
             "name": request.student.name,
             "department_name": request.student.department_name,
+            "college_name": request.student.college_name,
         },
 
-        "certificates": request.certificates.split(","),
+        # ---- Core request data ----
+        "certificates": (
+            request.certificates.split(",")
+            if isinstance(request.certificates, str)
+            else []
+        ),
         "purpose": request.purpose,
         "overall_status": request.overall_status,
         "created_at": request.created_at,
 
-        # 🔥 SIGNERS (THIS FIXES EVERYTHING)
-        "hod": {
-            "name": request.hod.name,
-            "signature_path": request.hod.signature_path,
-        } if request.hod else None,
+        "hod_updated_at": request.hod_updated_at,
+        "vp_updated_at": request.vp_updated_at,
+        "principal_updated_at": request.principal_updated_at,
 
-        "principal": {
-            "name": request.principal.name,
-            "signature_path": request.principal.signature_path,
-        } if request.principal else None,
+        # ---- Role-wise timestamps ----
+        "timeline": {
+            "hod_updated_at": request.hod_updated_at,
+            "vp_updated_at": request.vp_updated_at,
+            "principal_updated_at": request.principal_updated_at,
+        },
 
-        # Optional: approval audit trail
+        # ---- SIGNERS ----
+        "hod": (
+            {
+                "name": request.hod.name,
+                "signature_path": request.hod.signature_path,
+                "acted_at": request.hod_updated_at,
+            }
+            if request.hod
+            else None
+        ),
+
+        "vp": (
+            {
+                "name": request.vp.name,
+                "signature_path": request.vp.signature_path,
+                "acted_at": request.vp_updated_at,
+            }
+            if request.vp
+            else None
+        ),
+
+        "principal": (
+            {
+                "name": request.principal.name,
+                "signature_path": request.principal.signature_path,
+                "acted_at": request.principal_updated_at,
+            }
+            if request.principal
+            else None
+        ),
+
+        # ---- Optional audit trail ----
         "approvals": [
             {
                 "role": a.approver_role,
@@ -1447,7 +1618,6 @@ def get_certificate_request(
             for a in request.approvals
         ],
     }
-
 
 class DecisionSchema(BaseModel):
     overall_status: str  # approved | rejected
@@ -1460,10 +1630,10 @@ async def forward_certificate_request(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    if current_user.role != "hod":
+    if current_user.role not in ["hod", "vice_principal"]:
         raise HTTPException(
             status_code=403,
-            detail="Only HOD can forward certificate requests",
+            detail="You are not allowed to forward this request",
         )
 
     cert_request = (
@@ -1472,7 +1642,13 @@ async def forward_certificate_request(
         .first()
     )
 
-    hod_approval = (
+    if not cert_request:
+        raise HTTPException(
+            status_code=404,
+            detail="Certificate request not found",
+        )
+
+    approval = (
         db.query(models.CertificateApproval)
         .filter(
             models.CertificateApproval.request_id == request_id,
@@ -1481,31 +1657,60 @@ async def forward_certificate_request(
         .first()
     )
 
-    if not hod_approval:
+    if not approval:
         raise HTTPException(
             status_code=400,
-            detail="Approval record not found for this HOD",
+            detail="Approval record not found for this user",
         )
+    # 🔁 ROLE-BASED FLOW
+    if current_user.role == "hod":
+        cert_request.overall_status = "forwarded_to_vp"
+        cert_request.hod_updated_at = datetime.utcnow()
 
+        approval.status = "forwarded"
+        approval.acted_at = datetime.utcnow()
 
-    hod_approval.status = "forwarded"
-    hod_approval.acted_at = datetime.utcnow()
+        next_approver_id = cert_request.vp_id
+        next_role = "vice_principal"
 
-    cert_request.overall_status = "forwarded"
+    elif current_user.role == "vice_principal":
+        cert_request.overall_status = "forwarded_to_principal"
+        cert_request.vp_updated_at = datetime.utcnow()
 
-    db.add(hod_approval)
+        approval.status = "forwarded"
+        approval.acted_at = datetime.utcnow()
+
+        next_approver_id = cert_request.principal_id
+        next_role = "principal"
+
+    approval.acted_at = datetime.utcnow()
+
+    # 📝 Create next approval record
+    next_approval = models.CertificateApproval(
+        request_id=cert_request.id,
+        approver_id=next_approver_id,
+        approver_role=next_role,
+        status="pending",
+    )
+
+    db.add_all([approval, next_approval])
     db.commit()
+
+    # 🔔 Notify next approver
     await manager.notify(
-        cert_request.principal_id,
+        next_approver_id,
         {
-            "title": "Certificate Request Forwarded",
-            "message": f"{current_user.name} forwarded a certificate request for approval",
+            "title": "Certificate Request Awaiting Approval",
+            "message": f"{current_user.name} forwarded a certificate request",
             "type": "CERTIFICATE_FORWARDED",
             "request_id": cert_request.id,
         }
     )
 
-    return {"message": "Certificate forwarded successfully"}
+    return {
+        "message": f"Certificate forwarded to {next_role.replace('_', ' ').title()}"
+    }
+
 
 
 @app.post("/certificate-requests/{request_id}/reject")
@@ -1514,11 +1719,6 @@ async def reject_certificate_request(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    if current_user.role not in ["hod", "principal"]:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You are not allowed to reject certificate requests",
-        )
 
     cert_request = (
         db.query(models.CertificateRequest)
@@ -1841,3 +2041,300 @@ async def test_ws(current_user=Depends(get_current_user)):
         }
     )
     return {"ok": True}
+
+@app.get("/letter-template")
+def get_letter_template(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if current_user.role != "student":
+        raise HTTPException(
+            status_code=403,
+            detail="Only students can access letter templates",
+        )
+
+    if not current_user.college_name or not current_user.department_name:
+        raise HTTPException(
+            status_code=400,
+            detail="Student college or department not assigned",
+        )
+
+    # --- Fetch HOD ---
+    hod = (
+        db.query(models.User)
+        .filter(
+            models.User.role == "hod",
+            models.User.department_name == current_user.department_name,
+            models.User.college_name == current_user.college_name,
+            models.User.access_status == "approved",
+        )
+        .first()
+    )
+
+    # --- Fetch Vice Principal ---
+    vice_principal = (
+        db.query(models.User)
+        .filter(
+            models.User.role == "vice_principal",
+            models.User.college_name == current_user.college_name,
+            models.User.access_status == "approved",
+        )
+        .first()
+    )
+
+    # --- Fetch Principal ---
+    principal = (
+        db.query(models.User)
+        .filter(
+            models.User.role == "principal",
+            models.User.college_name == current_user.college_name,
+            models.User.access_status == "approved",
+        )
+        .first()
+    )
+
+    if not hod:
+        raise HTTPException(status_code=404, detail="HOD not found")
+    if not vice_principal:
+        raise HTTPException(status_code=404, detail="Vice Principal not found")
+    if not principal:
+        raise HTTPException(status_code=404, detail="Principal not found")
+
+    return {
+    "student": {
+        "id": current_user.id,
+        "name": current_user.name,
+        "department": current_user.department_name,
+        "college": current_user.college_name,
+    },
+    "recipients": {
+        "hod": {
+            "id": hod.id,
+            "name": hod.name,
+        },
+        "vice_principal": {
+            "id": vice_principal.id,
+            "name": vice_principal.name,
+        },
+        "principal": {
+            "id": principal.id,
+            "name": principal.name,
+        },
+    },
+}
+
+@app.post(
+    "/certificate-delivery",
+    status_code=201,
+)
+async def arrange_certificate_delivery(
+    data: schemas.CertificateDeliveryCreate,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    # 🔐 ROLE CHECK
+    if current_user.role != "superintendent":
+        raise HTTPException(
+            status_code=403,
+            detail="Only superintendent can arrange certificate delivery",
+        )
+
+    # 🔍 FETCH CERTIFICATE REQUEST
+    cert_request = (
+        db.query(models.CertificateRequest)
+        .filter(models.CertificateRequest.id == data.certificate_request_id)
+        .first()
+    )
+
+    if not cert_request:
+        raise HTTPException(
+            status_code=404,
+            detail="Certificate request not found",
+        )
+
+    # 🚫 PREVENT DUPLICATE DELIVERY
+    existing_delivery = (
+        db.query(models.CertificateDelivery)
+        .filter(
+            models.CertificateDelivery.certificate_request_id
+            == data.certificate_request_id
+        )
+        .first()
+    )
+
+    if existing_delivery:
+        raise HTTPException(
+            status_code=400,
+            detail="Delivery already arranged for this certificate request",
+        )
+
+    # ✅ CREATE DELIVERY ENTRY
+    delivery = models.CertificateDelivery(
+        certificate_request_id=cert_request.id,
+        pickup_date=data.pickup_date,
+        pickup_time=data.pickup_time,
+        pickup_location=data.pickup_location,
+    )
+
+    db.add(delivery)
+
+    # 🔄 UPDATE CERTIFICATE STATUS
+    cert_request.overall_status = "delivery_initiated"
+
+    db.commit()
+    db.refresh(delivery)
+
+    # 🔔 NOTIFY STUDENT
+    await manager.notify(
+        cert_request.student_id,
+        {
+            "title": "Certificate Ready for Pickup",
+            "message": (
+                "Your certificate is ready for collection.\n"
+                f"Pickup on {data.pickup_date} at {data.pickup_time} "
+                f"from {data.pickup_location.replace('_', ' ').title()}."
+            ),
+            "type": "CERTIFICATE_READY",
+            "request_id": cert_request.id,
+        }
+    )
+
+    # 💬 OPTIONAL SYSTEM MESSAGE (like your create API)
+    send_system_message(
+        db=db,
+        sender_id=current_user.id,
+        receiver_id=cert_request.student_id,
+        text=(
+            "Your certificate is ready for pickup.\n"
+            f"Date: {data.pickup_date}\n"
+            f"Time: {data.pickup_time}\n"
+            f"Location: {data.pickup_location.replace('_', ' ').title()}"
+        ),
+    )
+
+    return {
+        "message": "Certificate delivery arranged and student notified",
+        "delivery_id": delivery.id,
+    }
+
+
+@app.get(
+    "/certificate-delivery/{certificate_request_id}",
+    response_model=schemas.CertificateDeliveryOut,
+)
+def get_certificate_delivery(
+    certificate_request_id: int,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+
+    # 🔍 FETCH DELIVERY
+    delivery = (
+        db.query(models.CertificateDelivery)
+        .join(models.CertificateRequest)
+        .filter(
+            models.CertificateDelivery.certificate_request_id
+            == certificate_request_id
+        )
+        .first()
+    )
+
+    if not delivery:
+        raise HTTPException(
+            status_code=404,
+            detail="Certificate delivery not found",
+        )
+
+    cert_request = delivery.certificate_request
+    student = cert_request.student
+
+    return schemas.CertificateDeliveryOut(
+        certificate_request_id=cert_request.id,
+        student_name=student.name,
+        certificates=cert_request.certificates.split(","),
+        pickup_date=delivery.pickup_date,
+        pickup_time=delivery.pickup_time,
+        pickup_location=delivery.pickup_location,
+    )
+
+@app.post(
+    "/certificate-delivery/{certificate_request_id}/collected",
+    status_code=200,
+)
+async def mark_certificate_collected(
+    certificate_request_id: int,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    # 🔐 ROLE CHECK
+    if current_user.role != "superintendent":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only superintendent can mark certificate as collected",
+        )
+
+    # 🔍 FETCH DELIVERY
+    delivery = (
+        db.query(models.CertificateDelivery)
+        .filter(
+            models.CertificateDelivery.certificate_request_id
+            == certificate_request_id
+        )
+        .first()
+    )
+
+    if not delivery:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Certificate delivery not found",
+        )
+
+    # 🔍 FETCH CERTIFICATE REQUEST
+    cert_request = (
+        db.query(models.CertificateRequest)
+        .filter(models.CertificateRequest.id == certificate_request_id)
+        .first()
+    )
+
+    if not cert_request:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Certificate request not found",
+        )
+
+    # 🚫 ALREADY COLLECTED
+    if cert_request.overall_status == "collected":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Certificate already marked as collected",
+        )
+
+    # ✅ UPDATE STATUS
+    cert_request.overall_status = "collected"
+    delivery.collected_at = datetime.utcnow()
+
+    db.commit()
+
+    # 🔔 NOTIFY STUDENT
+    await manager.notify(
+        cert_request.student_id,
+        {
+            "title": "Certificate Collected",
+            "message": "Your certificate has been successfully collected.",
+            "type": "CERTIFICATE_COLLECTED",
+            "request_id": cert_request.id,
+        }
+    )
+
+    # 💬 SYSTEM MESSAGE (optional but consistent)
+    send_system_message(
+        db=db,
+        sender_id=current_user.id,
+        receiver_id=cert_request.student_id,
+        text="Your certificate has been marked as collected. Thank you.",
+    )
+
+    return {
+        "message": "Certificate marked as collected successfully",
+        "certificate_request_id": cert_request.id,
+    }

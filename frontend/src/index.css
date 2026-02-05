@@ -17,7 +17,14 @@
 
   --color-danger: #dc2626;
 }
+:root {
+  --primary-gradient-from: #f5d97a;
+  --primary-gradient-via: #f0c35a;
+  --primary-gradient-to: #d4a017;
 
+  --primary-solid: #d4a017;
+  --primary-solid-hover: #b89214;
+}
 /* ---------- BASE ---------- */
 body {
   margin: 0;
@@ -121,3 +128,4 @@ h1, h2, h3, h4, h5 {
 .link {
   @apply font-medium text-black cursor-pointer hover:underline;
 }
+

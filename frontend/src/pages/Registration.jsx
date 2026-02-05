@@ -2,6 +2,7 @@ import PrincipalRegister from "../components/PrincipalRegister";
 import VicePrincipalRegister from "../components/VicePrincipalRegister";
 import HODRegister from "../components/HODRegister";
 import StudentRegister from "../components/StudentRegister";
+import SuperintendentRegister from "../components/SuperintendentRegister";
 
 export default function Registration() {
   const role = localStorage.getItem("Role");
@@ -11,6 +12,7 @@ export default function Registration() {
     if (role === "vice_principal") return <VicePrincipalRegister />;
     if (role === "hod") return <HODRegister />;
     if (role === "student") return <StudentRegister />;
+    if (role === "superintendent") return <SuperintendentRegister />;
     return null;
   };
 

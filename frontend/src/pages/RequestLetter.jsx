@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useEffect } from "react";
 import LetterPreview from "../components/LetterPreview";
 import CertificatePreview from "../components/CertificatePreview";
 import CustomLetterPreview from "../components/CustomLetterPreview";
@@ -12,6 +13,10 @@ export default function NewRequestLetter() {
   const [success, setSuccess] = useState(false);
 
   const [requestType, setRequestType] = useState("");
+  const [template, setTemplate] = useState(null);
+  const [subject, setSubject] = useState("");
+
+
 
   // Leave
   const [fromDate, setFromDate] = useState("");
@@ -30,6 +35,33 @@ export default function NewRequestLetter() {
   const isCertificate = requestType === "certificate";
   const isCustom = requestType === "custom";
 
+  useEffect(() => {
+  const fetchTemplate = async () => {
+    const token = localStorage.getItem("token");
+
+    try {
+      const res = await fetch("http://localhost:8000/letter-template", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.detail || "Failed to load letter template");
+      }
+
+      const data = await res.json();
+      setTemplate(data);
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  fetchTemplate();
+}, []);
+
+
   const addCertificateField = () => {
     setCertificates((prev) => [...prev, ""]);
   };
@@ -39,6 +71,8 @@ export default function NewRequestLetter() {
     updated[index] = value;
     setCertificates(updated);
   };
+
+
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -129,26 +163,60 @@ export default function NewRequestLetter() {
       setLoading(false);
     }
   };
+  const computedSubject = (() => {
+    if (isLeave) {
+      return remarks
+        ? `Requesting leave for ${remarks}`
+        : "Leave Request";
+    }
 
-  const previewData = requestType
+    if (isCertificate) {
+      return certificatePurpose
+        ? `Requesting certificates for ${certificatePurpose}`
+        : "Certificate Request";
+    }
+
+    if (isCustom) {
+      return subject || "Custom Request";
+    }
+
+    return "";
+  })();
+
+
+  const previewData =
+  requestType && template?.student
     ? {
-        studentName: user?.name,
-        department: user?.department_name,
-        type:
-          isLeave
-            ? "Leave Request"
-            : isCertificate
-            ? "Certificate Request"
-            : "Custom Letter",
-        fromDate,
-        toDate,
-        reason: remarks,
-        certificates,
-        certificatePurpose,
-        to: isCustom ? customTo : "HOD",
-        customContent,
+        student: {
+          name: template.student.name,
+          department: template.student.department,
+          college: template.student.college,
+        },
+
+        recipients: template.recipients,
+
+        subject: computedSubject,
+
+        certificates: isCertificate
+          ? certificates.filter((c) => c && c.trim() !== "")
+          : [],
+
+        certificatePurpose: isCertificate
+          ? certificatePurpose
+          : "",
+
+        body: isLeave
+          ? {
+              fromDate,
+              toDate,
+              reason: remarks,
+            }
+          : null,
+
+        status: "Draft",
       }
     : null;
+
 
   return (
     <div className="min-h-screen bg-gray-100 flex items-center justify-center px-10">
@@ -158,7 +226,13 @@ export default function NewRequestLetter() {
         }`}
       >
         {/* FORM */}
-        <div className="w-full max-w-md rounded-2xl bg-white shadow-xl p-8">
+        <div
+            className={`w-full max-w-md rounded-2xl bg-white shadow-xl p-8 my-2 flex flex-col
+              transition-all duration-500 ease-in-out
+              ${requestType ? "max-h-[100vh]" : "max-h-fit"}
+            `}
+          >
+
           <div className="text-center mb-6">
             <h1 className="text-2xl font-semibold">New Request</h1>
             <p className="text-sm text-gray-500 mt-1">
@@ -166,7 +240,13 @@ export default function NewRequestLetter() {
             </p>
           </div>
 
-          <form className="space-y-5" onSubmit={handleSubmit}>
+          <form
+              onSubmit={handleSubmit}
+              className={`space-y-5 pb-4 transition-all duration-300
+                ${requestType ? "flex-1 overflow-y-auto" : ""}
+              `}
+            >
+
             {/* REQUEST TYPE */}
             <select
               value={requestType}
@@ -263,6 +343,13 @@ export default function NewRequestLetter() {
                     <option value="HOD">HOD</option>
                   </select>
                 </div>
+                  <input
+                    type="text"
+                    placeholder="Subject"
+                    value={subject}
+                    onChange={(e) => setSubject(e.target.value)}
+                    className="w-full rounded-lg border px-4 py-2.5"
+                  />
 
                 <textarea
                   placeholder="Write your letter content here..."
@@ -277,7 +364,7 @@ export default function NewRequestLetter() {
             <button
               type="submit"
               disabled={!requestType || loading}
-              className="w-full rounded-lg py-2.5 bg-black text-white disabled:opacity-40"
+              className="w-full rounded-lg py-2.5 bg-primary-gradient text-black disabled:opacity-40"
             >
               {loading ? "Submitting..." : "Submit Request"}
             </button>

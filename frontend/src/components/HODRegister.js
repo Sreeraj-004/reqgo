@@ -211,7 +211,7 @@ export default function HODRegister() {
             type="button"
             onClick={handleSendRequest}
             disabled={!selectedCollege || !selectedDepartment || loading}
-            className="w-full rounded-lg py-2.5 bg-black text-white disabled:opacity-40"
+            className="w-full rounded-lg py-2.5 bg-primary-gradient text-black disabled:opacity-40"
           >
             {loading ? "Sending..." : "Send Request"}
           </button>
@@ -219,9 +219,9 @@ export default function HODRegister() {
       </div>
 
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
+        <div className="absolute inset-0 bg-black/50 backdrop-blur-sm">
           <div
-            className="absolute inset-0 bg-black/50"
+            className="absolute inset-0 bg-primary-gradient/50"
             onClick={() => setShowModal(false)}
           />
 
@@ -240,7 +240,7 @@ export default function HODRegister() {
 
             <button
               onClick={() => setShowModal(false)}
-              className="mt-6 w-full rounded-lg py-2.5 bg-black text-white"
+              className="mt-6 w-full rounded-lg py-2.5 bg-primary-gradient text-black"
             >
               Close
             </button>

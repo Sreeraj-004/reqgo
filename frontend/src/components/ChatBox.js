@@ -163,7 +163,7 @@ export default function ChatBox() {
           />
           <button
             onClick={handleSend}
-            className="bg-black text-white px-4 py-2 rounded-full text-sm"
+            className="bg-primary-gradient text-black px-4 py-2 rounded-full text-sm"
           >
             Send
           </button>

@@ -9,11 +9,11 @@ export default function ChatBubble({ text, meta, isMe }) {
         onClick={() => navigate(meta.path)}
         className={`max-w-xs px-4 py-3 rounded-xl cursor-pointer ${
           isMe
-            ? "bg-black text-white ml-auto"
+            ? "bg-primary-gradient text-black ml-auto"
             : "bg-white text-black"
         }`}
       >
-        <p className="text-sm font-medium">
+        <p className="text-sm font-bold font-underline mb-1">
           {meta.label}
         </p>
         <p className="text-xs opacity-80">
@@ -27,7 +27,7 @@ export default function ChatBubble({ text, meta, isMe }) {
     <div
       className={`max-w-xs px-4 py-2 rounded-xl text-sm ${
         isMe
-          ? "bg-black text-white ml-auto"
+          ? "bg-primary-gradient text-black ml-auto"
           : "bg-white text-black"
       }`}
     >

@@ -178,7 +178,7 @@ export default function StudentRegister() {
             type="button"
             onClick={handleSendRequest}
             disabled={!selectedCollege || !selectedDepartment}
-            className="w-full rounded-lg py-2.5 bg-black text-white
+            className="w-full rounded-lg py-2.5 bg-primary-gradient text-black
                        hover:opacity-90 transition
                        disabled:opacity-40 disabled:cursor-not-allowed"
           >
@@ -190,12 +190,15 @@ export default function StudentRegister() {
       {/* Modal */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
+          
+          {/* BACKDROP */}
           <div
-            className="absolute inset-0 bg-black/50"
+            className="absolute inset-0 bg-black/50 backdrop-blur-sm transition-opacity"
             onClick={() => setShowModal(false)}
           />
 
-          <div className="relative z-10 w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
+          {/* MODAL CARD */}
+          <div className="relative z-10 w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl">
             <h2 className="text-lg font-semibold mb-3 text-center">
               Request Sent
             </h2>
@@ -210,13 +213,14 @@ export default function StudentRegister() {
 
             <button
               onClick={() => setShowModal(false)}
-              className="mt-6 w-full rounded-lg py-2.5 bg-black text-white"
+              className="mt-6 w-full rounded-lg py-2.5 bg-primary-gradient text-black"
             >
               Close
             </button>
           </div>
         </div>
       )}
+
     </>
   );
 }

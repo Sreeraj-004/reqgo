@@ -11,7 +11,10 @@ import ViewRequest from "./pages/ViewRequest";
 import ChatPage from "./pages/ChatPage";
 import { useEffect } from "react";
 
+
+
 import useNotifications from "./hooks/useNotifications";
+import HeroSection from "./pages/Hero";
 
 function App() {
   const user = (() => {
@@ -25,6 +28,9 @@ function App() {
   // 🔔 GLOBAL WebSocket (works on ALL pages)
   useNotifications(user);
 
+  console.log("Current user:", user);
+  
+
   useEffect(() => {
     if ("Notification" in window && Notification.permission === "default") {
       Notification.requestPermission();
@@ -34,7 +40,7 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<Navigate to="/login" />} />
+        <Route path="/" element={<HeroSection />} />
 
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />

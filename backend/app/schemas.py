@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import date, datetime, time
 from typing import List, Optional
 
 from pydantic import BaseModel, EmailStr
@@ -68,13 +68,15 @@ class LeaveOut(BaseModel):
     hod_id: int
 
     from_date: date
+    subject: str
     to_date: date
     reason: str | None
     overall_status: str
     created_at: datetime
+    updated_at: datetime
 
     student: StudentOut
-    hod: UserSignatureOut | None   # 🔥 THIS MUST EXIST
+    hod: UserSignatureOut | None  
 
     model_config = {
         "from_attributes": True
@@ -335,6 +337,27 @@ class CertificateCreateOut(BaseModel):
     purpose: Optional[str]
     overall_status: str
     created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class SuperintendentAccessRequest(BaseModel):
+    user_id: int
+    college_name: str
+
+class CertificateDeliveryCreate(BaseModel):
+    certificate_request_id: int
+    pickup_date: date
+    pickup_time: time
+    pickup_location: str
+
+class CertificateDeliveryOut(BaseModel):
+    certificate_request_id: int
+    student_name: str
+    certificates: List[str]
+    pickup_date: date
+    pickup_time: time
+    pickup_location: str
 
     class Config:
         from_attributes = True

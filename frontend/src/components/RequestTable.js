@@ -37,7 +37,7 @@ export default function RequestsTable() {
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
         <table className="w-full text-sm">
           <thead>
-            <tr className="text-left bg-black text-white">
+            <tr className="text-left bg-primary-gradient text-black">
               <th className="px-6 py-3">Name</th>
               <th className="px-6 py-3">Email</th>
               <th className="px-6 py-3">Role</th>
@@ -75,6 +75,7 @@ export default function RequestsTable() {
 function Row({ req, token, currentRole, onDone }) {
   const roleLabel = (() => {
     if (req.role === "vice_principal") return "Vice Principal";
+    if (req.role === "superintendent") return "Superintendent";
     if (req.role === "hod")
       return `HOD – ${req.department_name || "Unknown Dept"}`;
     if (req.role === "student")
@@ -157,8 +158,8 @@ function Row({ req, token, currentRole, onDone }) {
         <button
           onClick={handleAccept}
           disabled={!allowed}
-          className={`px-3 py-1 text-xs rounded text-white
-            ${allowed ? "bg-black hover:opacity-90" : "bg-gray-300 cursor-not-allowed"}
+          className={`px-3 py-1 text-xs rounded text-black
+            ${allowed ? "bg-primary-gradient hover:opacity-90" : "bg-gray-300 cursor-not-allowed"}
           `}
         >
           Accept
@@ -167,7 +168,7 @@ function Row({ req, token, currentRole, onDone }) {
         <button
           onClick={handleReject}
           disabled={!allowed}
-          className={`px-3 py-1 text-xs rounded text-white
+          className={`px-3 py-1 text-xs rounded text-black
             ${allowed ? "bg-red-600 hover:opacity-90" : "bg-gray-300 cursor-not-allowed"}
           `}
         >

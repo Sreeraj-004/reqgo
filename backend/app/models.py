@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Date, DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import Column, Date, DateTime,Time, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import relationship
 
 from .database import Base
@@ -36,7 +36,7 @@ class User(Base):
     )
 
     # ======================
-    # CERTIFICATE RELATIONSHIPS ✅ ADD THIS
+    # CERTIFICATE RELATIONSHIPS 
     # ======================
 
     certificate_requests = relationship(
@@ -187,12 +187,19 @@ class CertificateRequest(Base):
 
     # Comma-separated certificate names
     certificates = Column(Text, nullable=False)
+    subject = Column(String(255))
 
     purpose = Column(Text, nullable=True)
     hod_id = Column(
         Integer,
         ForeignKey("users.id"),
         nullable=False,
+    )
+
+    vp_id = Column(
+        Integer,
+        ForeignKey("users.id"),
+        nullable=True,
     )
 
     principal_id = Column(
@@ -203,7 +210,7 @@ class CertificateRequest(Base):
 
     # in_progress → approved → rejected
     overall_status = Column(
-        String(20),
+        String(50),
         nullable=False,
         default="in_progress",
     )
@@ -213,11 +220,10 @@ class CertificateRequest(Base):
         server_default=func.now(),
     )
 
-    updated_at = Column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        onupdate=func.now(),
-    )
+    hod_updated_at = Column(DateTime(timezone=True), nullable=True)
+    vp_updated_at = Column(DateTime(timezone=True), nullable=True)
+    principal_updated_at = Column(DateTime(timezone=True), nullable=True)
+
 
     # relationships
     student = relationship(
@@ -236,6 +242,10 @@ class CertificateRequest(Base):
     hod = relationship(
         "User",
         foreign_keys=[hod_id],
+    )
+    vp = relationship(
+        "User",
+        foreign_keys=[vp_id],
     )
 
     principal = relationship(
@@ -325,4 +335,47 @@ class CustomLetterRequest(Base):
     receiver = relationship(
         "User",
         foreign_keys=[receiver_id],
+    )
+
+
+class CertificateDelivery(Base):
+    __tablename__ = "certificate_deliveries"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    certificate_request_id = Column(
+        Integer,
+        ForeignKey("certificate_requests.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,  # one delivery per certificate request
+    )
+
+    pickup_date = Column(Date, nullable=False)
+    pickup_time = Column(Time, nullable=False)
+
+    pickup_location = Column(
+        String(50),
+        nullable=False,
+        default="front_desk",
+    )
+
+    created_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+    collected_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=True,
+    )
+    # ======================
+    # RELATIONSHIPS
+    # ======================
+
+    certificate_request = relationship(
+        "CertificateRequest",
+        backref="delivery",
     )

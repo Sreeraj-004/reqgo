@@ -5,14 +5,24 @@ import CertificatePreview from "../components/CertificatePreview";
 import CustomLetterPreview from "../components/CustomLetterPreview";
 import html2pdf from "html2pdf.js";
 import { QRCodeCanvas } from "qrcode.react";
+import ArrangeDocumentsModal from "../components/ArrangeDocumentsModal";
+import CertificateDeliveryDetailsModal
+  from "../components/CertificateDeliveryDetailsModal";
+
+
 
 export default function ViewRequest() {
   const { id } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
+  const [showArrangeModal, setShowArrangeModal] = useState(false);
+  const [showDeliveryDetails, setShowDeliveryDetails] = useState(false);
+
+
 
   const token = localStorage.getItem("token");
   const user = JSON.parse(localStorage.getItem("user"));
+  console.log("Current user:", user);
 
   const previewRef = useRef(null);
 
@@ -22,6 +32,15 @@ export default function ViewRequest() {
   const [error, setError] = useState("");
   const [showShare, setShowShare] = useState(false);
   const [customContent, setCustomContent] = useState("");
+
+  const studentName =
+  data?.student?.name ||
+  data?.studentName ||
+  "request";
+  const filename = `${studentName}_${requestType}_request.pdf`;
+  const normalizePath = (p) => p?.replaceAll("\\", "/");
+
+
   
   const handleSendMessage = () => {
     if (!data) return;
@@ -36,9 +55,12 @@ export default function ViewRequest() {
       else if (requestType === "certificate") {
         if (data.status === "in_progress") {
           receiverId = data.hodId;
-        } else if (data.status === "forwarded") {
+        } else if (data.status === "forwarded_to_vp") {
+          receiverId = data.vpId;
+        } else if (data.status === "forwarded_to_principal") {
           receiverId = data.principalId;
         }
+
       }
 
       else if (requestType === "custom") {
@@ -81,71 +103,149 @@ export default function ViewRequest() {
     let apiUrl = "";
 
     if (requestType === "leave") {
-      apiUrl = `http://localhost:8000/leaves/${id}`;
-    } else if (requestType === "certificate") {
-      apiUrl = `http://localhost:8000/certificate-requests/${id}`;
-    } else if (requestType === "custom") {
-      apiUrl = `http://localhost:8000/custom-letters/${id}`;
-    }
+        apiUrl = `http://localhost:8000/leaves/${id}`;
+      } else if (requestType === "certificate") {
+        apiUrl = `http://localhost:8000/certificate-requests/${id}`;
+      } else if (requestType === "custom") {
+        apiUrl = `http://localhost:8000/custom-letters/${id}`;
+      }
 
-    fetch(apiUrl, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    })
-      .then(async (res) => {
-        if (!res.ok) {
-          const err = await res.json();
-          throw new Error(err.detail || "Failed to load request");
-        }
-        return res.json();
+      fetch(apiUrl, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
       })
-      .then((resData) => {
-        if (requestType === "leave") {
-          setData({
-            type: "Leave Request",
-            studentId: resData.student_id,
-            hodId: resData.hod_id,
+        .then(async (res) => {
+          if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.detail || "Failed to load request");
+          }
+          return res.json();
+        })
+        .then((resData) => {
+          if (requestType === "leave") {
+    setData({
+      type: "Leave Request",
 
-            studentName: resData.student?.name,
-            department: resData.student?.department_name,
-            fromDate: resData.from_date,
-            toDate: resData.to_date,
-            reason: resData.reason,
-            status: resData.overall_status,
+      studentId: resData.student_id,
+      hodId: resData.hod_id,
 
-            hodName: resData.hod?.name || "HOD",
-            hodSignature: resData.hod?.signature_path
-              ? `http://localhost:8000/${resData.hod.signature_path}`
-              : null,
-          });
-        }
+      student: {
+        name: resData.student?.name,
+        department: resData.student?.department_name,
+        college: resData.student?.college_name,
+      },
+
+      recipient: {
+        name: resData.hod?.name || "HOD",
+        designation: `Head of Department, ${resData.student?.department_name}`,
+      },
+
+      subject: resData.subject || "Leave Request",
+
+      body: {
+        fromDate: resData.from_date,
+        toDate: resData.to_date,
+        reason: resData.reason,
+        subject: resData.subject,
+      },
+
+      status: resData.overall_status,
+
+      signature:
+        resData.overall_status === "approved"
+          ? {
+              name: resData.hod?.name,
+              designation: "Head of Department",
+              approvedAt: resData.updated_at,
+              image: resData.hod?.signature_path
+                ? `http://localhost:8000/${resData.hod.signature_path}`
+                : null,
+            }
+          : null,
+    });
+  }
+
 
         if (requestType === "certificate") {
           setData({
             type: "Certificate Request",
+
             studentId: resData.student_id,
             hodId: resData.hod_id,
             principalId: resData.principal_id,
+            vpId: resData.vp_id,
 
-            studentName: resData.student?.name,
-            department: resData.student?.department_name,
-            certificates: resData.certificates,
-            certificatePurpose: resData.purpose,
+            student: {
+              name: resData.student?.name,
+              department: resData.student?.department_name,
+              college: resData.student?.college_name,
+            },
+
+            recipients: {
+              hod: resData.hod
+                ? { name: resData.hod.name }
+                : null,
+              vice_principal: resData.vp
+                ? { name: resData.vp.name }
+                : null,
+              principal: resData.principal
+                ? { name: resData.principal.name }
+                : null,
+            },
+
+            subject: resData.subject || "Certificate Request",
+
+            certificates: Array.isArray(resData.certificates)
+              ? resData.certificates
+              : typeof resData.certificates === "string"
+                ? resData.certificates.split(",").map(c => c.trim())
+                : [],
+
+            certificatePurpose: resData.purpose || "",
+
             status: resData.overall_status,
 
-            hodName: resData.hod?.name || "HOD",
-            hodSignature: resData.hod?.signature_path
-              ? `http://localhost:8000/${resData.hod.signature_path}`
-              : null,
+            signatures: {
+              hod:
+                ["forwarded_to_vp", "forwarded_to_principal", "approved","collected","delivery_initiated"].includes(resData.overall_status)
 
-            principalName: resData.principal?.name || "Principal",
-            principalSignature: resData.principal?.signature_path
-              ? `http://localhost:8000/${resData.principal.signature_path}`
-              : null,
+                  ? {
+                      name: resData.hod?.name || "HOD",
+                      designation: `HOD, ${resData.student?.department_name}`,
+                      approvedAt: resData.hod_updated_at || null,
+                      image: resData.hod?.signature_path
+                        ? `http://localhost:8000/${resData.hod.signature_path}`
+                        : null,
+                    }
+                  : null,
+              vp:
+                ["forwarded_to_principal", "approved","collected","delivery_initiated"].includes(resData.overall_status)
+                  ? {
+                      name: resData.vp?.name || "Vice Principal",
+                      designation: "Vice Principal",
+                      approvedAt: resData.vp_updated_at || null,
+                      image: resData.vp?.signature_path
+                        ? `http://localhost:8000/${resData.vp.signature_path}`
+                        : null,
+                    }
+                  : null,
+
+
+              principal:
+                ["approved","collected","delivery_initiated"].includes(resData.overall_status)
+                  ? {
+                      name: resData.principal?.name || "Principal",
+                      designation: "Principal",
+                      approvedAt: resData.principal_updated_at || null,
+                      image: resData.principal?.signature_path
+                        ? `http://localhost:8000/${resData.principal.signature_path}`
+                        : null,
+                    }
+                  : null,
+            },
           });
         }
-
 
 
         if (requestType === "custom") {
@@ -190,20 +290,32 @@ export default function ViewRequest() {
   }
 
   /* ---------------- CERTIFICATE ---------------- */
-  if (requestType === "certificate" && ["in_progress", "forwarded"].includes(data.status)) {
+  if (
+      requestType === "certificate" &&
+      ["in_progress", "forwarded_to_vp", "forwarded_to_principal"].includes(data.status)
+    ) {
+
     if (role === "hod" && data.status === "in_progress") {
       return {
-        primary: { label: "Forward", action: "forwarded" },
+        primary: { label: "Forward to VP", action: "forwarded" },
         secondary: { label: "Reject", action: "rejected" },
       };
     }
 
-    if (role === "principal" && data.status==="forwarded") {
+    if (role === "vice_principal" && data.status === "forwarded_to_vp") {
+      return {
+        primary: { label: "Forward to Principal", action: "forwarded" },
+        secondary: { label: "Reject", action: "rejected" },
+      };
+    }
+
+    if (role === "principal" && data.status === "forwarded_to_principal") {
       return {
         primary: { label: "Approve", action: "approved" },
         secondary: { label: "Reject", action: "rejected" },
       };
     }
+
 
     return null;
   }
@@ -351,7 +463,7 @@ export default function ViewRequest() {
     <div className="flex gap-2">
       <button
         onClick={downloadPDF}
-        className="px-4 py-2 rounded-md bg-black text-white text-xs hover:opacity-90"
+        className="px-4 py-2 rounded-md bg-primary-gradient text-black text-xs hover:opacity-90"
       >
         Download PDF
       </button>
@@ -365,25 +477,43 @@ export default function ViewRequest() {
     </div>
 
     {/* CENTER: ACTIONS */}
-{actionConfig && (
-  <div className="flex gap-3">
-    {actionConfig.secondary && (
+    {actionConfig && (
+      <div className="flex gap-3">
+        {actionConfig.secondary && (
+          <button
+            onClick={() => handleDecision(actionConfig.secondary.action)}
+            className="px-5 py-2 rounded-md bg-red-700 text-white text-sm hover:opacity-90"
+          >
+            {actionConfig.secondary.label}
+          </button>
+        )}
+
+        <button
+          onClick={() => handleDecision(actionConfig.primary.action)}
+          className="px-5 py-2 rounded-md bg-green-700 text-white text-sm hover:opacity-90"
+        >
+          {actionConfig.primary.label}
+        </button>
+      </div>
+    )}
+    {user?.role === "superintendent" && requestType === "certificate" && data.status === "approved" && (
       <button
-        onClick={() => handleDecision(actionConfig.secondary.action)}
-        className="px-5 py-2 rounded-md bg-red-700 text-white text-sm hover:opacity-90"
+        onClick={() => setShowArrangeModal(true)}
+        className="px-4 py-2 rounded-md bg-primary-gradient text-black text-xs hover:opacity-90"
       >
-        {actionConfig.secondary.label}
+        Delivery
       </button>
     )}
-
-    <button
-      onClick={() => handleDecision(actionConfig.primary.action)}
-      className="px-5 py-2 rounded-md bg-green-700 text-white text-sm hover:opacity-90"
-    >
-      {actionConfig.primary.label}
-    </button>
-  </div>
-)}
+    {["student", "superintendent"].includes(user?.role) &&
+    requestType === "certificate" &&
+    data.status === "delivery_initiated" && (
+      <button
+        onClick={() => setShowDeliveryDetails(true)}
+        className="px-4 py-2 rounded-md bg-primary-gradient text-black text-xs hover:opacity-90"
+      >
+        Delivery Details
+      </button>
+    )}
 
 
     {/* RIGHT: MESSAGE */}
@@ -418,7 +548,7 @@ export default function ViewRequest() {
 
               <button
                 onClick={() => navigator.clipboard.writeText(currentUrl)}
-                className="w-full py-2 text-sm rounded-md bg-black text-white hover:opacity-90"
+                className="w-full py-2 text-sm rounded-md bg-primary-gradient text-black hover:opacity-90"
               >
                 Copy Link
               </button>
@@ -437,6 +567,20 @@ export default function ViewRequest() {
           </div>
         </div>
       )}
+      <ArrangeDocumentsModal
+        open={showArrangeModal}
+        onClose={() => setShowArrangeModal(false)}
+        studentName={studentName}
+        certificateRequestId={id}
+      />
+
+      <CertificateDeliveryDetailsModal
+          open={showDeliveryDetails}
+          onClose={() => setShowDeliveryDetails(false)}
+          certificateRequestId={id}
+        />
+
+
     </div>
   );
 }

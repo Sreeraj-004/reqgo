@@ -119,7 +119,7 @@ export default function EditCollegeDetails() {
                 key={dept}
                 className="
                   flex items-center gap-2
-                  bg-black text-white
+                  bg-primary-gradient text-black
                   px-3 py-1
                   rounded-full
                   text-sm
@@ -131,8 +131,8 @@ export default function EditCollegeDetails() {
                   type="button"
                   onClick={() => removeDepartment(dept)}
                   className="
-                    text-white/70
-                    hover:text-white
+                    text-black/70
+                    hover:text-black
                     leading-none
                   "
                   aria-label={`Remove ${dept}`}
@@ -153,7 +153,7 @@ export default function EditCollegeDetails() {
             <button
               type="button"
               onClick={addDepartment}
-              className="bg-black text-white px-4"
+              className="bg-primary-gradient text-black px-4"
             >
               ➜
             </button>
@@ -163,7 +163,7 @@ export default function EditCollegeDetails() {
 
         <button
           type="submit"
-          className="w-full rounded-lg py-2.5 bg-black text-white"
+          className="w-full rounded-lg py-2.5 bg-primary-gradient text-black"
         >
           Save Changes
         </button>

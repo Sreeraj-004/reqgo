@@ -5,6 +5,7 @@ export default function NormalRequestsTable() {
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
+  
 
   useEffect(() => {
     const fetchRequests = async () => {
@@ -34,6 +35,8 @@ export default function NormalRequestsTable() {
     switch (status) {
       case "approved":
         return "bg-green-100 text-green-700";
+      case "collected":
+        return "bg-green-100 text-green-700";
       case "rejected":
         return "bg-red-100 text-red-700";
       case "in_progress":
@@ -47,7 +50,7 @@ export default function NormalRequestsTable() {
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
         <table className="w-full text-sm">
           <thead>
-            <tr className="text-left bg-black text-white">
+            <tr className="text-left bg-primary-gradient text-black">
               <th className="px-6 py-3">Sender</th>
               <th className="px-6 py-3">Type</th>
               <th className="px-6 py-3">Subject</th>
@@ -86,16 +89,16 @@ export default function NormalRequestsTable() {
                   <td className="px-6 py-4">
                     <span
                       className={`px-3 py-1 rounded-full text-xs font-medium capitalize ${getStatusStyles(
-                        req.overall_status
+                        req.overall_status.replaceAll("_", " ")
                       )}`}
                     >
-                      {req.overall_status}
+                      {req.overall_status.replaceAll("_", " ")}
                     </span>
                   </td>
                   <td className="px-6 py-4">
                     <button
                       onClick={() => navigate(req.view_url)}
-                      className="px-4 py-1.5 rounded-md bg-black text-white text-xs hover:opacity-90 transition"
+                      className="px-4 py-1.5 rounded-md bg-primary-gradient text-black text-xs hover:opacity-90 transition"
                     >
                       View
                     </button>

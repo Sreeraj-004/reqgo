@@ -114,108 +114,117 @@ export default function PrincipalRegister() {
   };
 
   return (
-    <div className="w-full max-w-md rounded-2xl bg-white shadow-xl p-8">
-      <div className="text-center mb-6">
-        <h1 className="text-2xl font-semibold">College Details</h1>
-        <p className="text-sm text-gray-500">Register your institution</p>
+  <div className="w-full max-w-md rounded-2xl bg-white shadow-xl p-8">
+    <div className="text-center mb-6">
+      <h1 className="text-2xl font-semibold">College Details</h1>
+      <p className="text-sm text-gray-500">Register your institution</p>
+    </div>
+
+    <form className="space-y-4" onSubmit={handleSubmit}>
+      <input
+        placeholder="College name"
+        value={collegeName}
+        onChange={(e) => {
+          const value = e.target.value;
+          setCollegeName(value);
+          setIsDuplicate(existingColleges.includes(value.trim().toLowerCase()));
+        }}
+        className="w-full rounded-lg border border-gray-300 px-4 py-2.5
+           focus:outline-none focus:ring-2 focus:ring-yellow-400"
+
+        required
+      />
+
+      <input
+        placeholder="Address"
+        value={address}
+        onChange={(e) => setAddress(e.target.value)}
+        className="w-full rounded-lg border border-gray-300 px-4 py-2.5
+           focus:outline-none focus:ring-2 focus:ring-yellow-400"
+
+        required
+      />
+
+      <div className="grid grid-cols-2 gap-3">
+        <input
+          placeholder="City"
+          value={city}
+          onChange={(e) => setCity(e.target.value)}
+          className="rounded-lg border border-gray-300 px-4 py-2.5
+           focus:outline-none focus:ring-2 focus:ring-yellow-400"
+
+          required
+        />
+        <input
+          placeholder="Zip code"
+          value={zipCode}
+          onChange={(e) => setZipCode(e.target.value)}
+          className="rounded-lg border border-gray-300 px-4 py-2.5
+           focus:outline-none focus:ring-2 focus:ring-yellow-400"
+
+          required
+        />
       </div>
 
-      <form className="space-y-4" onSubmit={handleSubmit}>
-        <input
-          placeholder="College name"
-          value={collegeName}
-          onChange={(e) => {
-            const value = e.target.value;
-            setCollegeName(value);
-            setIsDuplicate(existingColleges.includes(value.trim().toLowerCase()));
-          }}
-          className="w-full rounded-lg border px-4 py-2.5"
-          required
-        />
+      <div>
+        <p className="text-sm font-medium mb-2">Departments</p>
 
-        <input
-          placeholder="Address"
-          value={address}
-          onChange={(e) => setAddress(e.target.value)}
-          className="w-full rounded-lg border px-4 py-2.5"
-          required
-        />
-
-        <div className="grid grid-cols-2 gap-3">
-          <input
-            placeholder="City"
-            value={city}
-            onChange={(e) => setCity(e.target.value)}
-            className="rounded-lg border px-4 py-2.5"
-            required
-          />
-          <input
-            placeholder="Zip code"
-            value={zipCode}
-            onChange={(e) => setZipCode(e.target.value)}
-            className="rounded-lg border px-4 py-2.5"
-            required
-          />
-        </div>
-
-        <div>
-          <p className="text-sm font-medium mb-2">Departments</p>
-
-          <div className="flex flex-wrap gap-2 mb-2">
-            {departments.map((dept) => (
-              <span
-                key={dept}
-                className="flex items-center gap-2 bg-black text-white px-3 py-1 rounded-full text-sm"
-              >
-                {dept}
-                <button
-                  type="button"
-                  onClick={() => removeDepartment(dept)}
-                  className="text-white/70 hover:text-white"
-                >
-                  ✕
-                </button>
-              </span>
-            ))}
-          </div>
-
-          <div className="flex border rounded-lg overflow-hidden">
-            <input
-              placeholder="Add department"
-              value={departmentInput}
-              onChange={(e) => setDepartmentInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              className="flex-1 px-4 py-2.5"
-            />
-            <button
-              type="button"
-              onClick={addDepartment}
-              className="bg-black text-white px-4"
+        <div className="flex flex-wrap gap-2 mb-2">
+          {departments.map((dept) => (
+            <span
+              key={dept}
+              className="flex items-center gap-2 bg-primary-gradient text-gray-900 px-3 py-1 rounded-full text-sm"
             >
-              ➜
-            </button>
-          </div>
+              {dept}
+              <button
+                type="button"
+                onClick={() => removeDepartment(dept)}
+                className="opacity-70 hover:opacity-100"
+              >
+                ✕
+              </button>
+            </span>
+          ))}
         </div>
 
-        <div>
-          <p className="text-sm font-medium mb-2">Principal Signature</p>
+
+        <div className="flex border rounded-lg overflow-hidden">
           <input
-            type="file"
-            accept="image/png, image/jpeg"
-            onChange={(e) => setSignatureFile(e.target.files[0])}
-            className="w-full rounded-lg border px-4 py-2.5"
-            required
+            placeholder="Add department"
+            value={departmentInput}
+            onChange={(e) => setDepartmentInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            className="flex-1 px-4 py-2.5"
           />
+          <button
+            type="button"
+            onClick={addDepartment}
+            className="bg-primary-gradient text-gray-900 px-4"
+          >
+            ➜
+          </button>
         </div>
+      </div>
 
-        <button
-          type="submit"
-          disabled={isDuplicate || loading}
-          className="w-full rounded-lg py-2.5 bg-black text-white disabled:opacity-40"
-        >
-          {loading ? "Submitting..." : "Register College"}
-        </button>
-      </form>
-    </div>
-  );
+      <div>
+        <p className="text-sm font-medium mb-2">Principal Signature</p>
+        <input
+          type="file"
+          accept="image/png, image/jpeg"
+          onChange={(e) => setSignatureFile(e.target.files[0])}
+          className="w-full rounded-lg border px-4 py-2.5"
+          required
+        />
+      </div>
+
+      <button
+        type="submit"
+        disabled={isDuplicate || loading}
+        className="w-full rounded-lg py-2.5 bg-primary-gradient text-gray-900 disabled:opacity-40"
+      >
+        {loading ? "Submitting..." : "Register College"}
+      </button>
+    </form>
+  </div>
+);
 }

@@ -51,7 +51,8 @@ export default function Dashboard() {
               {user.role === "student" && (
                 <button
                   onClick={() => navigate("/NewRequest")}
-                  className="px-4 py-2 rounded-lg bg-black text-white text-sm font-medium hover:opacity-80 transition"
+                  className="px-4 py-2 rounded-lg bg-primary-gradient text-gray-900 text-sm font-medium hover:opacity-90 transition"
+
                 >
                   New Request
                 </button>
@@ -59,7 +60,7 @@ export default function Dashboard() {
             </div>
 
             {/* 🔥 EXACT SAME LOGIC AS YOUR ORIGINAL */}
-            {user.role === "student" ? (
+            {["student", "superintendent"].includes(user.role) ? (
               <NormalRequestsTable />
             ) : (
               <>
@@ -68,8 +69,8 @@ export default function Dashboard() {
                     onClick={() => setRequestType("access")}
                     className={`pb-2 ${
                       requestType === "access"
-                        ? "border-b-2 border-black text-black"
-                        : "text-gray-400 hover:text-black"
+                        ? "border-b-2 border-yellow-500 text-gray-900"
+                        : "text-gray-400 hover:text-yellow-600"
                     }`}
                   >
                     Access
@@ -79,8 +80,8 @@ export default function Dashboard() {
                     onClick={() => setRequestType("normal")}
                     className={`pb-2 ${
                       requestType === "normal"
-                        ? "border-b-2 border-black text-black"
-                        : "text-gray-400 hover:text-black"
+                        ? "border-b-2 border-yellow-500 text-gray-900"
+                        : "text-gray-400 hover:text-yellow-600"
                     }`}
                   >
                     General
@@ -110,10 +111,12 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="bg-black flex h-screen">
+    <div className="bg-gradient-to-br from-yellow-50 via-amber-50 to-orange-50 flex h-screen">
+
       <Sidebar setActiveView={setActiveView} />
 
-      <div className="bg-white w-full m-6 rounded-md overflow-y-auto">
+      <div className="bg-white w-full m-6 rounded-xl overflow-y-auto shadow-xl">
+
         <div className="flex justify-between items-start px-8 pt-8">
           <div>
             <h1 className="text-4xl">Welcome</h1>
@@ -122,7 +125,7 @@ export default function Dashboard() {
 
           <button
             onClick={handleLogout}
-            className="px-5 py-2 rounded-lg bg-black text-white text-sm font-medium hover:opacity-80 transition"
+            className="px-5 py-2 rounded-lg bg-primary-gradient text-black text-sm font-medium hover:opacity-80 transition"
           >
             Logout
           </button>
