@@ -17,7 +17,13 @@ export default function Registration() {
   };
 
   return (
-    <div className="min-h-screen flex">
+    <div className="relative min-h-screen flex overflow-hidden
+                bg-gradient-to-br from-yellow-50 via-amber-50 to-orange-50">
+                  {/* Background Blobs */}
+    <div className="absolute -top-32 -left-32 h-96 w-96 bg-yellow-300 rounded-full blur-3xl opacity-30" />
+    <div className="absolute top-1/3 -right-32 h-96 w-96 bg-amber-400 rounded-full blur-3xl opacity-30" />
+
+
 
       <div className="w-full md:w-1/2 flex items-center justify-center bg-gray-100">
         {renderForm()}

@@ -195,17 +195,15 @@ export default function NewRequestLetter() {
 
         recipients: template.recipients,
 
+        to: isCustom ? customTo : null,
+
         subject: computedSubject,
 
-        certificates: isCertificate
-          ? certificates.filter((c) => c && c.trim() !== "")
-          : [],
-
-        certificatePurpose: isCertificate
-          ? certificatePurpose
-          : "",
-
-        body: isLeave
+        body: isCustom
+          ? {
+              content: customContent,
+            }
+          : isLeave
           ? {
               fromDate,
               toDate,
@@ -213,13 +211,22 @@ export default function NewRequestLetter() {
             }
           : null,
 
+        certificates: isCertificate
+          ? certificates.filter((c) => c && c.trim() !== "")
+          : [],
+
+        certificatePurpose: isCertificate ? certificatePurpose : "",
+
         status: "Draft",
       }
     : null;
 
 
   return (
-    <div className="min-h-screen bg-gray-100 flex items-center justify-center px-10">
+    <div className="relative min-h-screen bg-gradient-to-br from-yellow-50 via-amber-50 to-orange-50 flex items-center justify-center px-10 overflow-hidden">
+
+
+      
       <div
         className={`w-full max-w-6xl flex items-center transition-all duration-500 ${
           requestType ? "justify-between gap-8" : "justify-center"
@@ -396,6 +403,7 @@ export default function NewRequestLetter() {
           <CertificatePreview data={previewData} />
         )}
       </div>
+
     </div>
   );
 }

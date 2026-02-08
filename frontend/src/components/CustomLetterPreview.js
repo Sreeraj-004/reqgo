@@ -7,22 +7,24 @@ export default function CustomLetterPreview({ data }) {
     );
   }
 
+  const { student, recipients, to, subject, body, status } = data;
+
   const recipientMap = {
     HOD: {
-      name: data.recipients?.hod?.name,
-      designation: `Head of Department, ${data.department}`,
+      name: recipients?.hod?.name,
+      designation: `Head of Department, ${student?.department || ""}`,
     },
     Principal: {
-      name: data.recipients?.principal?.name,
+      name: recipients?.principal?.name,
       designation: "Principal",
     },
     "Vice Principal": {
-      name: data.recipients?.vice_principal?.name,
+      name: recipients?.vice_principal?.name,
       designation: "Vice Principal",
     },
   };
 
-  const recipient = recipientMap[data.to];
+  const recipient = recipientMap[to];
 
   return (
     <div className="w-full max-w-md bg-white rounded-2xl shadow-xl p-8 min-h-[420px] flex flex-col">
@@ -31,44 +33,48 @@ export default function CustomLetterPreview({ data }) {
       </h2>
 
       <div className="text-sm leading-relaxed space-y-4 flex-1">
-        <div className="text-sm space-y-1 mb-4">
-          <p className="font-medium">To</p>
 
-          <p className="font-semibold">
-            {recipient?.name || "________"}
+        {/* FROM */}
+        {student && (
+          <div className="space-y-1">
+            <p className="font-medium">From</p>
+            <p className="font-semibold">{student.name}</p>
+            {student.department && <p>{student.department} Department</p>}
+            {student.college && <p>{student.college}</p>}
+          </div>
+        )}
+
+        {/* DATE */}
+        <p className="text-xs text-gray-500">
+          {new Date().toLocaleDateString("en-GB", {
+            day: "2-digit",
+            month: "short",
+            year: "numeric",
+          })}
+        </p>
+
+        {/* TO */}
+        {recipient && (
+          <div className="space-y-1">
+            <p className="font-medium">To</p>
+            <p className="font-semibold">{recipient.name || "________"}</p>
+            {recipient.designation && <p>{recipient.designation}</p>}
+          </div>
+        )}
+
+        {/* SUBJECT */}
+        {subject && (
+          <p className="font-medium mt-3">
+            <span className="text-gray-600 font-extrabold">Sub:</span>{" "}
+            {subject}
           </p>
-
-          <p>{recipient?.designation}</p>
-
-          <p>{data.college}</p>
-
-          <p className="text-xs text-gray-500 pt-2">
-            {new Date().toLocaleDateString("en-GB", {
-              day: "2-digit",
-              month: "short",
-              year: "numeric",
-            })}
-          </p>
-        </div>
-        {data.sub && (
-              <p className="font-medium mt-2">
-                <span className="text-gray-600">Sub:</span> {data.sub}
-              </p>
-            )}
+        )}
 
         <p>Respected Sir/Madam,</p>
 
-        <p>
-          I am <strong>{data.studentName}</strong>
-          {data.department
-            ? ` from the ${data.department} department`
-            : ""}
-          .
-        </p>
-
+        {/* BODY */}
         <p className="whitespace-pre-line">
-          {data.customContent ||
-            "Your letter content will appear here as you type..."}
+          {body?.content || "Your letter content will appear here as you type..."}
         </p>
 
         <p className="pt-4">
@@ -76,23 +82,13 @@ export default function CustomLetterPreview({ data }) {
           <br />
           Yours sincerely,
           <br />
-          <strong>{data.studentName}</strong>
+          <strong>{student?.name}</strong>
         </p>
       </div>
 
-      <div className="mt-6 pt-4 border-t text-xs text-gray-500 space-y-1">
-        <p>
-          <span className="font-medium text-gray-700">
-            Addressed To:
-          </span>{" "}
-          {data.to || "Not selected"}
-        </p>
-        <p>
-          <span className="font-medium text-gray-700">
-            Status:
-          </span>{" "}
-          Draft
-        </p>
+      <div className="mt-4 pt-3 border-t text-xs text-gray-500">
+        <span className="font-medium text-gray-700">Current Status:</span>{" "}
+        {status}
       </div>
     </div>
   );

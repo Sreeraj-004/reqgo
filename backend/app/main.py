@@ -956,13 +956,6 @@ async def create_certificate_request(
     )
     
 
-    if not vp:
-        raise HTTPException(
-            status_code=400,
-            detail="Vice Principal not found for your college",
-        )
-
-
     db.add(approval)
     db.commit()
 

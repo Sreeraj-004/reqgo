@@ -249,18 +249,42 @@ export default function ViewRequest() {
 
 
         if (requestType === "custom") {
+          const normalizedTo = resData.to_role
+            ?.replace("_", " ")
+            ?.toLowerCase();
+
+          const toMap = {
+            hod: "HOD",
+            principal: "Principal",
+            "vice principal": "Vice Principal",
+          };
+
           setData({
             type: "Custom Letter",
 
             studentId: resData.student_id,
             toUserId: resData.receiver_id,
 
-            studentName: resData.student?.name,
-            department: resData.student?.department_name,
+            student: {
+              name: resData.student?.name,
+              department: resData.student?.department_name,
+              college: resData.student?.college_name,
+            },
 
-            // ✅ NORMALISED KEYS
-            to: resData.to_role,
-            content: customContent,     
+            recipients: {
+              hod: resData.hod ? { name: resData.hod.name } : null,
+              vice_principal: resData.vp ? { name: resData.vp.name } : null,
+              principal: resData.principal ? { name: resData.principal.name } : null,
+            },
+
+            to: toMap[normalizedTo],
+
+            subject: resData.subject || "Custom Letter",
+
+            body: {
+              content: resData.content,
+            },
+
             status: resData.status,
           });
         }
@@ -441,7 +465,9 @@ export default function ViewRequest() {
      RENDER
   -------------------------------------------------- */
   return (
-    <div className="min-h-screen bg-gray-100 px-6 py-6">
+    <div className="min-h-screen bg-gradient-to-br from-yellow-50 via-amber-50 to-orange-50 px-6 py-6">
+      <div className="absolute -top-32 -left-32 h-96 w-96 bg-yellow-300 rounded-full blur-3xl opacity-30" />
+    <div className="absolute top-1/3 -right-32 h-96 w-96 bg-amber-400 rounded-full blur-3xl opacity-30" />
       <div className="max-w-3xl mx-auto text-center mb-6">
         <h1 className="text-3xl font-semibold">{data.type}</h1>
         <p className="text-sm text-gray-600 mt-1">
