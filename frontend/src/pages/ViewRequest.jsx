@@ -59,6 +59,8 @@ export default function ViewRequest() {
           receiverId = data.vpId;
         } else if (data.status === "forwarded_to_principal") {
           receiverId = data.principalId;
+        } else if (data.status === "approved" || data.status === "collected" || data.status === "delivery_initiated") {
+          receiverId = data.principalId;
         }
 
       }
