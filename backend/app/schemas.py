@@ -279,6 +279,7 @@ class DecisionSchema(BaseModel):
 class CustomLetterCreate(BaseModel):
     to_role: str
     content: str
+    subject: str | None = "Custom Letter"
 
 
 class CustomLetterOut(BaseModel):

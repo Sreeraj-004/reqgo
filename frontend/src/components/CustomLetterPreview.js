@@ -6,25 +6,31 @@ export default function CustomLetterPreview({ data }) {
       </div>
     );
   }
+  
 
   const { student, recipients, to, subject, body, status } = data;
 
-  const recipientMap = {
-    HOD: {
-      name: recipients?.hod?.name,
-      designation: `Head of Department, ${student?.department || ""}`,
-    },
-    Principal: {
-      name: recipients?.principal?.name,
-      designation: "Principal",
-    },
-    "Vice Principal": {
-      name: recipients?.vice_principal?.name,
-      designation: "Vice Principal",
-    },
+  const designationMap = {
+    hod: `Head of Department, ${student?.department || ""}`,
+    principal: "Principal",
+    vice_principal: "Vice Principal",
   };
 
-  const recipient = recipientMap[to];
+const normalizedTo = to
+  ?.toLowerCase()
+  .replaceAll(" ", "_");
+
+  const toName =
+  data?.receiver?.name ||
+  recipients?.[normalizedTo]?.name ||
+  null;
+
+
+const designation = designationMap[normalizedTo];
+
+
+
+
 
   return (
     <div className="w-full max-w-md bg-white rounded-2xl shadow-xl p-8 min-h-[420px] flex flex-col">
@@ -54,27 +60,31 @@ export default function CustomLetterPreview({ data }) {
         </p>
 
         {/* TO */}
-        {recipient && (
+        {toName && (
           <div className="space-y-1">
             <p className="font-medium">To</p>
-            <p className="font-semibold">{recipient.name || "________"}</p>
-            {recipient.designation && <p>{recipient.designation}</p>}
+            <p className="font-semibold">{toName}</p>
+            {student?.college && <p>{student.college}</p>}
           </div>
         )}
 
+
+
         {/* SUBJECT */}
-        {subject && (
-          <p className="font-medium mt-3">
-            <span className="text-gray-600 font-extrabold">Sub:</span>{" "}
-            {subject}
-          </p>
-        )}
+        <p className="font-medium mt-3">
+          <span className="text-gray-600 font-extrabold">Sub:</span>{" "}
+          {subject || "Custom Letter"}
+        </p>
+
 
         <p>Respected Sir/Madam,</p>
 
         {/* BODY */}
         <p className="whitespace-pre-line">
-          {body?.content || "Your letter content will appear here as you type..."}
+          {body?.content?.length > 0
+            ? body.content
+            : "Your letter content will appear here as you type..."}
+
         </p>
 
         <p className="pt-4">

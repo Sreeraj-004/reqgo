@@ -304,6 +304,7 @@ class CustomLetterRequest(Base):
     )
 
     to_role = Column(String(50), nullable=False)  # principal / vice_principal / hod
+    subject = Column(String(255), nullable=False, default="Custom Letter") 
     content = Column(Text, nullable=False)
 
     status = Column(

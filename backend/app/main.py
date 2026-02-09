@@ -1026,6 +1026,7 @@ async def create_custom_letter(
     letter = models.CustomLetterRequest(
         student_id=current_user.id,
         receiver_id=receiver.id,
+        subject=data.subject or "Custom Letter",
         to_role=data.to_role,
         content=data.content,
         status="submitted",
@@ -1086,11 +1087,18 @@ def get_custom_letter(
         "receiver_id": letter.receiver_id,
         "to_role": letter.to_role,
         "content": letter.content,
+        "subject": letter.subject,
         "status": letter.status,
         "created_at": letter.created_at,
         "student": {
             "name": letter.student.name,
             "department": letter.student.department_name,
+            "college": letter.student.college_name,
+        },
+
+        "receiver": {
+            "name": letter.receiver.name,
+            "role": letter.receiver.role,
         },
     }
 

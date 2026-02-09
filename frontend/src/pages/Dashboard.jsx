@@ -119,8 +119,9 @@ export default function Dashboard() {
 
         <div className="flex justify-between items-start px-8 pt-8">
           <div>
-            <h1 className="text-4xl">Welcome</h1>
-            <h2 className="text-3xl font-extrabold">{user.name}</h2>
+            <h1 className="text-4xl">Welcome {user.name}</h1>
+            <hr className="mt-2"></hr>
+            <h3 className="text-lg mt-2">{user.role} Dashboard</h3>
           </div>
 
           <button

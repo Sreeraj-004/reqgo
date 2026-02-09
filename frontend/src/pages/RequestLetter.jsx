@@ -135,6 +135,7 @@ export default function NewRequestLetter() {
           },
           body: JSON.stringify({
             to_role: customTo,
+            subject: subject || "Custom Letter",
             content: customContent,
           }),
         });

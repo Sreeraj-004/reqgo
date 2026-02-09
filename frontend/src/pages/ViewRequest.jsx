@@ -249,16 +249,6 @@ export default function ViewRequest() {
 
 
         if (requestType === "custom") {
-          const normalizedTo = resData.to_role
-            ?.replace("_", " ")
-            ?.toLowerCase();
-
-          const toMap = {
-            hod: "HOD",
-            principal: "Principal",
-            "vice principal": "Vice Principal",
-          };
-
           setData({
             type: "Custom Letter",
 
@@ -267,17 +257,15 @@ export default function ViewRequest() {
 
             student: {
               name: resData.student?.name,
-              department: resData.student?.department_name,
-              college: resData.student?.college_name,
+              department: resData.student?.department,
+              college: resData.student?.college,
             },
 
-            recipients: {
-              hod: resData.hod ? { name: resData.hod.name } : null,
-              vice_principal: resData.vp ? { name: resData.vp.name } : null,
-              principal: resData.principal ? { name: resData.principal.name } : null,
+            // ✅ DIRECT receiver
+            receiver: {
+              name: resData.receiver?.name,
+              role: resData.receiver?.role,
             },
-
-            to: toMap[normalizedTo],
 
             subject: resData.subject || "Custom Letter",
 
@@ -288,6 +276,7 @@ export default function ViewRequest() {
             status: resData.status,
           });
         }
+
 
       })
       .catch((err) => setError(err.message))

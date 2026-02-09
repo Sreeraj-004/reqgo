@@ -81,15 +81,6 @@ export default function HeroSection() {
 
             <button
               onClick={() =>
-                previewRef.current?.scrollIntoView({ behavior: "smooth" })
-              }
-              className="hover:text-yellow-600"
-            >
-              Letters
-            </button>
-
-            <button
-              onClick={() =>
                 featuresRef.current?.scrollIntoView({ behavior: "smooth" })
               }
               className="hover:text-yellow-600"
@@ -110,71 +101,88 @@ export default function HeroSection() {
       {/* ================= HERO ================= */}
       <div
         ref={heroRef}
-        className="w-full h-screen flex flex-col items-center justify-center border-b scroll-mt-16"
+        className="relative w-full h-screen border-b scroll-mt-16 flex items-center"
       >
-        <h1
-          className="text-4xl md:text-7xl font-bold text-[#E0AF35]"
-          style={{
-            textShadow: `
-              -1px -1px 0 #7a6f00,
-              1px -1px 0 #7a6f00,
-              -1px  1px 0 #7a6f00,
-              1px  1px 0 #7a6f00,
-              0px  4px 6px rgba(0, 0, 0, 0.25)
-            `,
-          }}
-        >
-          Reqgo
-        </h1>
-
-        <div className="flex mt-10">
-          <button
-            onClick={() => navigate("/login")}
-            className="px-6 py-3 mr-4 rounded-xl bg-primary-gradient shadow-lg"
-          >
-            Get Started
-          </button>
-
-          <button
-            onClick={() =>
-              previewRef.current?.scrollIntoView({ behavior: "smooth" })
-            }
-            className="px-6 py-3 rounded-xl bg-white border-2 border-yellow-300 shadow-lg"
-          >
-            Learn more
-          </button>
+        {/* Floating Emotional Elements */}
+        <div className="absolute inset-0 pointer-events-none z-0">
+          <span className="absolute top-24 left-20 text-4xl opacity-30 animate-pulse">
+            📄
+          </span>
+          <span className="absolute top-40 right-32 text-4xl opacity-30 animate-bounce">
+            💬
+          </span>
+          <span className="absolute bottom-40 left-32 text-5xl opacity-25">
+            🏫
+          </span>
+          <span className="absolute bottom-24 right-24 text-4xl opacity-30 animate-pulse">
+            ✉️
+          </span>
         </div>
-      </div>
 
-      {/* ================= PREVIEW ================= */}
-      <div
-        ref={previewRef}
-        className="min-h-screen flex items-center scroll-mt-16"
-      >
-        <div className="container mx-auto px-6 grid grid-cols-1 md:grid-cols-2 gap-14 items-center">
+        {/* Background Image */}
+        <img
+          src="https://images.unsplash.com/photo-1562774053-701939374585?q=80&w=1920&auto=format&fit=crop"
+          alt="College Campus"
+          className="absolute inset-0 w-full h-full object-cover opacity-50"
+        />
 
-          <div className="px-10">
-            <span className="inline-block mb-4 px-4 py-1 text-sm bg-yellow-100 rounded-full">
-              Digitized College Workflow
+        {/* Overlay */}
+        <div className="absolute inset-0 bg-white/60 backdrop-blur-sm"></div>
+
+        {/* Content */}
+        <div className="container mx-auto px-6 grid grid-cols-1 md:grid-cols-2 gap-12 items-center relative z-10">
+          
+          {/* LEFT CONTENT */}
+          <div className="flex flex-col items-start max-w-xl ml-28">
+
+            {/* Badge */}
+            <span className="mb-4 inline-flex items-center px-4 py-1 rounded-full text-sm bg-yellow-100 text-yellow-800 font-medium">
+              Paperless • Fast • Transparent
             </span>
 
-            <h2 className="text-3xl font-semibold">
-              Create Requests Effortlessly
-            </h2>
+            {/* Heading */}
+            <h1
+              className="text-4xl md:text-7xl font-bold text-[#E0AF35]"
+              style={{
+                textShadow: `
+                  -1px -1px 0 #7a6f00,
+                  1px -1px 0 #7a6f00,
+                  -1px  1px 0 #7a6f00,
+                  1px  1px 0 #7a6f00,
+                  0px  4px 6px rgba(0, 0, 0, 0.25)
+                `,
+              }}
+            >
+              Reqgo
+            </h1>
 
-            <p className="mt-6 text-lg text-gray-600 max-w-xl">
-              Submit, forward, and approve requests digitally with full
-              transparency and tracking.
+            {/* Subheading */}
+            <p className="mt-4 text-lg md:text-xl text-gray-700 font-medium">
+              A digital request & approval system that replaces paper letters
+              across colleges.
             </p>
 
-            <button
-              onClick={() => navigate("/login")}
-              className="px-6 py-3 mt-6 rounded-xl bg-primary-gradient shadow-lg"
-            >
-              Get Started
-            </button>
+            {/* CTA buttons */}
+            <div className="flex mt-10">
+              <button
+                onClick={() => navigate("/login")}
+                className="px-6 py-3 mr-4 rounded-xl bg-primary-gradient shadow-lg"
+              >
+                Get Started
+              </button>
 
-            <div className="mt-10 grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <button
+                onClick={() =>
+                  featuresRef.current?.scrollIntoView({ behavior: "smooth" })
+                }
+                className="px-6 py-3 rounded-xl bg-white border-2 border-yellow-300 shadow-lg"
+              >
+                Explore features
+              </button>
+            </div>
+
+            {/* Preview Switch Tabs */}
+            <div className="mt-10 grid grid-cols-1 sm:grid-cols-3 gap-4 w-full">
               <FeatureCard
                 title="Leave Requests"
                 active={activePreview === "letter"}
@@ -191,10 +199,12 @@ export default function HeroSection() {
                 onClick={() => setActivePreview("custom")}
               />
             </div>
+
           </div>
 
+          {/* RIGHT LIVE PREVIEW */}
           <div className="flex justify-center">
-            <div className="w-full max-w-sm bg-white rounded-2xl shadow-xl p-4 border scale-75">
+            <div className="w-full max-w-sm bg-white rounded-2xl shadow-2xl mt-10 px-2 border scale-[0.7]">
               {activePreview === "letter" && (
                 <LetterPreview data={demoLetterData} />
               )}
@@ -206,6 +216,9 @@ export default function HeroSection() {
               )}
             </div>
           </div>
+
+
+
         </div>
       </div>
 
@@ -220,12 +233,36 @@ export default function HeroSection() {
           </h2>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
-            <FeatureBox title="Multi-Level Approval" />
-            <FeatureBox title="Real-Time Tracking" />
-            <FeatureBox title="Role-Based Access" />
-            <FeatureBox title="Digital Records" />
-            <FeatureBox title="Custom Requests" />
-            <FeatureBox title="Complete Audit Trail" />
+            <FeatureBox
+              title="Multi-Level Approval"
+              subtitle="Route requests through HOD, Principal, and office staff seamlessly."
+            />
+
+            <FeatureBox
+              title="Real-Time Tracking"
+              subtitle="Know exactly where your request is at any moment."
+            />
+
+            <FeatureBox
+              title="Role-Based Access"
+              subtitle="Students, faculty, and admins see only what they need."
+            />
+
+            <FeatureBox
+              title="Digital Records"
+              subtitle="All requests stored securely and accessible anytime."
+            />
+
+            <FeatureBox
+              title="Custom Requests"
+              subtitle="Create and submit custom letters beyond predefined formats."
+            />
+
+            <FeatureBox
+              title="Complete Audit Trail"
+              subtitle="Every action is logged for transparency and accountability."
+            />
+
           </div>
         </div>
       </div>
@@ -265,12 +302,12 @@ function FeatureCard({ title, onClick, active }) {
   );
 }
 
-function FeatureBox({ title }) {
+function FeatureBox({ title, subtitle }) {
   return (
     <div className="p-6 rounded-2xl border bg-gray-50 hover:shadow-lg transition">
       <h3 className="font-semibold mb-2">{title}</h3>
       <p className="text-sm text-gray-600">
-        Designed to simplify and streamline institutional workflows.
+        {subtitle}
       </p>
     </div>
   );
