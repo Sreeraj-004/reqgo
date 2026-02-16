@@ -17,6 +17,7 @@ class UserCreate(BaseModel):
     email: EmailStr
     password: str
     role: str = "student"
+    department_name: Optional[str] = None
 
 
 class UserProfile(BaseModel):

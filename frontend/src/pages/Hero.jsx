@@ -92,7 +92,7 @@ export default function HeroSection() {
               onClick={() => navigate("/login")}
               className="px-4 py-2 rounded-lg bg-primary-gradient shadow"
             >
-              Get Started
+              Login
             </button>
           </div>
         </div>
@@ -168,7 +168,7 @@ export default function HeroSection() {
                 onClick={() => navigate("/login")}
                 className="px-6 py-3 mr-4 rounded-xl bg-primary-gradient shadow-lg"
               >
-                Get Started
+                Login
               </button>
 
               <button
@@ -279,7 +279,7 @@ export default function HeroSection() {
           onClick={() => navigate("/login")}
           className="px-8 py-4 rounded-xl bg-primary-gradient shadow-lg"
         >
-          Get Started
+          Login
         </button>
       </div>
 

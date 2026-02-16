@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState }from "react";
+import {useEffect} from "react";
 import { useNavigate } from "react-router-dom";
 
 export default function Signup() {
@@ -11,6 +12,32 @@ export default function Signup() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [department, setDepartment] = useState("");
+  const shouldShowDepartment = role === "student" || role === "hod";
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+
+  const requiresSignature =
+  role === "principal" ||
+  role === "vice_principal" ||
+  role === "hod";
+  const [signatureFile, setSignatureFile] = useState(null);
+
+
+  
+const departments = [
+  "Computer Science",
+  "Computer Applications",
+  "Chemistry",
+  "Geography",
+  "Commerce",
+  "English",
+  "Physics",
+  "Mathematics",
+  "Psychology",
+  "Management",
+  "Hotel Management",
+];
+
 
   const roles = [
     { id: "principal", label: "Principal" },
@@ -24,50 +51,91 @@ export default function Signup() {
 
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError("");
+  e.preventDefault();
+  setError("");
 
-    if (!name || !email || !password) {
-      setError("Fill all fields");
-      return;
+  if (!name || !email || !password) {
+    setError("Fill all fields");
+    return;
+  }
+
+  if ((role === "student" || role === "hod") && !department) {
+    setError("Please select your department");
+    return;
+  }
+
+  if (requiresSignature && !signatureFile) {
+    setError("Signature is required for this role");
+    return;
+  }
+
+  try {
+    setLoading(true);
+
+    const formData = new FormData();
+    formData.append("name", name);
+    formData.append("email", email);
+    formData.append("password", password);
+    formData.append("role", role);
+    formData.append("department_name", department || "");
+
+    if (requiresSignature && signatureFile) {
+      formData.append("signature", signatureFile);
     }
 
-    try {
-      setLoading(true);
+    const res = await fetch("http://localhost:8000/users/", {
+      method: "POST",
+      body: formData,
+    });
 
-      const res = await fetch("http://localhost:8000/users/", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          name,
-          email,
-          password,
-          role,
-        }),
-      });
+    const data = await res.json();
 
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.detail || "Signup failed");
-      }
-
-      localStorage.setItem("token", data.jwt_token);
-      localStorage.setItem("user", JSON.stringify(data.user));
-      localStorage.setItem("Role", data.user.role);
-
-      navigate("/registration");
-    } catch (err) {
-      setError(err.message || "Something went wrong");
-    } finally {
-      setLoading(false);
+    if (!res.ok) {
+      throw new Error(data.detail || "Signup failed");
     }
-  };
+
+    localStorage.setItem("token", data.jwt_token);
+    localStorage.setItem("user", JSON.stringify(data.user));
+
+    setShowSuccessModal(true);
+
+  } catch (err) {
+    setError(err.message || "Something went wrong");
+  } finally {
+    setLoading(false);
+  }
+};
+
 
   return (
     <div className="relative min-h-screen flex items-center justify-center overflow-hidden bg-gradient-to-br from-yellow-50 via-amber-50 to-orange-50">
+      {showSuccessModal && (
+      <div className="fixed inset-0 flex items-center justify-center bg-black/40 backdrop-blur-sm z-50">
+        <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm text-center">
+          <h2 className="text-lg font-semibold text-gray-900 mb-3">
+            Signup Successful
+          </h2>
+          <p className="text-sm text-gray-600 mb-4">
+            Your account has been created successfully.
+          </p>
+          <p className="text-sm text-gray-600 mb-4">
+            Access will be granted once the admin approves your account.
+          </p>
+          <p className="text-sm text-gray-600 mb-6">
+            For queries contact: <span className="font-medium">admin@reqgo.com</span>
+          </p>
+
+          <button
+            onClick={() => navigate("/login")}
+            className="w-full rounded-lg py-2.5 font-medium text-gray-900
+                      bg-primary-gradient hover:opacity-90 transition shadow-lg"
+          >
+            Go to Login
+          </button>
+        </div>
+      </div>
+    )}
+
       
       {/* Background Blobs */}
       <div className="absolute -top-32 -left-32 h-96 w-96 bg-yellow-300 rounded-full blur-3xl opacity-30" />
@@ -114,6 +182,8 @@ export default function Signup() {
               className="w-full rounded-lg border border-gray-300 px-4 py-2.5 pr-10
                          focus:outline-none focus:ring-2 focus:ring-yellow-400"
             />
+            
+
 
             <button
               type="button"
@@ -133,6 +203,40 @@ export default function Signup() {
               )}
             </button>
           </div>
+
+          {shouldShowDepartment && (
+            <div>
+              <select
+                value={department}
+                onChange={(e) => setDepartment(e.target.value)}
+                className="w-full rounded-lg border border-gray-300 px-4 py-2.5
+                          focus:outline-none focus:ring-2 focus:ring-yellow-400"
+              >
+                <option value="">Select Department</option>
+                {departments.map((dept, index) => (
+                  <option key={index} value={dept}>
+                    {dept}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* signature */}
+          {requiresSignature && (
+          <div>
+            <p className="text-sm font-medium mb-2">Upload Signature</p>
+            <input
+              type="file"
+              accept="image/png, image/jpeg"
+              onChange={(e) => setSignatureFile(e.target.files[0])}
+              className="w-full rounded-lg border px-4 py-2.5"
+              required
+            />
+          </div>
+        )}
+
+
 
           {/* Role Selection */}
           <div>

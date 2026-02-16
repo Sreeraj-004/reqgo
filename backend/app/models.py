@@ -12,7 +12,7 @@ class User(Base):
     hashed_password = Column(String(255), nullable=False)
     role = Column(String(50), nullable=False, default="student")
 
-    college_name = Column(String(255), nullable=True)
+    college_name = Column(String(255), nullable=True, default="Yuvakshetra Institute of Management Studies")
     department_name = Column(String(255), nullable=True)
     access_status = Column(String(20), nullable=False, default="pending")
 
@@ -63,7 +63,7 @@ class College(Base):
     city = Column(String(100), nullable=False)
     zip_code = Column(String(20), nullable=False)
     departments = Column(Text, nullable=True)  # store as comma-separated values
-    principal_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    principal_id = Column(Integer, ForeignKey("users.id"), nullable=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 

@@ -8,12 +8,12 @@ export default function Sidebar({ setActiveView }) {
     {
       label: "Requests",
       key: "requests",
-      roles: ["principal", "vice_principal", "hod", "student","superintendent"],
+      roles: ["principal", "vice_principal", "hod", "student","superintendent","admin"],
     },
     {
       label: "Edit College Details",
       key: "editCollege",
-      roles: ["principal"],
+      roles: [""],
     },
   ];
 

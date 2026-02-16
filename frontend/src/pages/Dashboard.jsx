@@ -59,42 +59,12 @@ export default function Dashboard() {
               )}
             </div>
 
-            {/* 🔥 EXACT SAME LOGIC AS YOUR ORIGINAL */}
-            {["student", "superintendent"].includes(user.role) ? (
-              <NormalRequestsTable />
+            {user.role === "admin" ? (
+              <RequestsTable /> // Access only
             ) : (
-              <>
-                <div className="flex gap-6 border-b mb-6 text-sm font-medium">
-                  <button
-                    onClick={() => setRequestType("access")}
-                    className={`pb-2 ${
-                      requestType === "access"
-                        ? "border-b-2 border-yellow-500 text-gray-900"
-                        : "text-gray-400 hover:text-yellow-600"
-                    }`}
-                  >
-                    Access
-                  </button>
-
-                  <button
-                    onClick={() => setRequestType("normal")}
-                    className={`pb-2 ${
-                      requestType === "normal"
-                        ? "border-b-2 border-yellow-500 text-gray-900"
-                        : "text-gray-400 hover:text-yellow-600"
-                    }`}
-                  >
-                    General
-                  </button>
-                </div>
-
-                {requestType === "access" ? (
-                  <RequestsTable />
-                ) : (
-                  <NormalRequestsTable />
-                )}
-              </>
+              <NormalRequestsTable /> // General only
             )}
+
           </div>
         );
 

@@ -84,6 +84,7 @@ export default function LetterPreview({ data }) {
             <p className="font-medium">To</p>
             <p className="font-semibold">{recipient.name}</p>
             {recipient.designation && <p>{recipient.designation}</p>}
+            {student.college && <p>{student.college}</p>}
           </div>
         )}
 

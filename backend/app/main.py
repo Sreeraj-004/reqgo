@@ -5,7 +5,7 @@ from typing import List, Optional
 
 import jwt
 from fastapi.security import OAuth2PasswordBearer
-from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi import Depends, FastAPI, HTTPException, status, Form
 from passlib.context import CryptContext
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -129,21 +129,66 @@ def create_jwt_for_user(user: models.User) -> str:
 
 
 @app.post("/users/", response_model=schemas.AuthResponse, status_code=status.HTTP_201_CREATED)
-def create_user(user_in: schemas.UserCreate, db: Session = Depends(get_db)):
-    existing = get_user_by_email(db, user_in.email)
+def create_user(
+    name: str = Form(...),
+    email: str = Form(...),
+    password: str = Form(...),
+    role: str = Form(...),
+    department_name: str = Form(None),
+    signature: UploadFile = File(None),
+    db: Session = Depends(get_db),
+):
+    existing = get_user_by_email(db, email)
     if existing:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Email is already registered.",
         )
 
-    hashed_password = get_password_hash(user_in.password)
+    if role in ["student", "hod"] and not department_name:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Department is required for this role.",
+        )
+
+    signature_path = None
+
+    if role in ["principal", "vice_principal", "hod"]:
+        if not signature:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Signature is required for this role.",
+            )
+
+        if signature.content_type not in ["image/png", "image/jpeg"]:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Only PNG or JPG images are allowed",
+            )
+
+        upload_dir = "uploads/signatures"
+        os.makedirs(upload_dir, exist_ok=True)
+
+        file_ext = signature.filename.split(".")[-1]
+        filename = f"{uuid.uuid4()}.{file_ext}"
+        file_path = os.path.join(upload_dir, filename)
+
+        with open(file_path, "wb") as buffer:
+            buffer.write(signature.file.read())
+
+        signature_path = file_path
+
+    hashed_password = get_password_hash(password)
+
     user = models.User(
-        name=user_in.name,
-        email=user_in.email,
+        name=name,
+        email=email,
         hashed_password=hashed_password,
-        role=user_in.role,
+        role=role,
+        department_name=department_name,
+        signature_path=signature_path,
     )
+
     db.add(user)
     db.commit()
     db.refresh(user)
@@ -155,6 +200,92 @@ def create_user(user_in: schemas.UserCreate, db: Session = Depends(get_db)):
         jwt_token=jwt_token,
         user=user,
     )
+
+
+# create Admin
+def create_default_admin(db: Session):
+    existing_admin = (
+        db.query(models.User)
+        .filter(models.User.role == "admin")
+        .first()
+    )
+
+    if existing_admin:
+        return
+
+    hashed_password = pwd_context.hash("password123")
+
+    admin_user = models.User(
+        name="administrator",
+        email="admin@reqgo.com",
+        hashed_password=hashed_password,
+        role="admin",
+        access_status="approved",
+    )
+
+    db.add(admin_user)
+    db.commit()
+    print("Default admin created.")
+
+
+
+
+
+def create_default_college(db: Session):
+    existing_college = (
+        db.query(models.College)
+        .filter(models.College.name == "Yuvakshetra Institute of Management Studies")
+        .first()
+    )
+
+    if existing_college:
+        return
+
+    admin_user = (
+        db.query(models.User)
+        .filter(models.User.role == "admin")
+        .first()
+    )
+
+    if not admin_user:
+        return
+
+    departments_list = [
+        "Hotel Management",
+        "Commerce",
+        "English",
+        "Computer Science",
+        "Computer Application",
+        "Management",
+        "Physics",
+        "Chemistry",
+        "Geography",
+        "Mathematics",
+        "Psychology",
+    ]
+
+    college = models.College(
+        name="Yuvakshetra Institute of Management Studies",
+        address="Ezhakkad",
+        city="Mundur",
+        zip_code="678631",
+        departments=",".join(departments_list),
+        principal_id=None,
+    )
+
+    db.add(college)
+    db.commit()
+    print("Default college created.")
+
+@app.on_event("startup")
+def seed_admin_user():
+    db = next(get_db())
+    try:
+        create_default_admin(db)
+        create_default_college(db)
+    finally:
+        db.close()
+
 
 # ---------------------------------------------------------
 # College registration and access requests
@@ -398,10 +529,17 @@ def request_student_access(
 @app.post("/auth/login", response_model=schemas.AuthResponse)
 def login(credentials: schemas.LoginRequest, db: Session = Depends(get_db)):
     user = get_user_by_email(db, credentials.email)
+
     if not user or not verify_password(credentials.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
+        )
+
+    if user.access_status != "approved":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Your account is not yet approved. Please contact admin.",
         )
 
     jwt_token = create_jwt_for_user(user)
@@ -411,6 +549,7 @@ def login(credentials: schemas.LoginRequest, db: Session = Depends(get_db)):
         jwt_token=jwt_token,
         user=user,
     )
+
 
 
 @app.post("/leaves/", response_model=schemas.LeaveOut, status_code=201)
@@ -1186,31 +1325,23 @@ def get_pending_access_requests(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    if not current_user.college_name:
-        return []
-
-    base_query = db.query(models.User).filter(
-        models.User.college_name == current_user.college_name,
-        models.User.access_status == "pending",
+    # 🔐 Strict admin check
+    if current_user.role != "admin":
+        print(current_user.role)
+        raise HTTPException(
+            status_code=403,
+            detail="Only admin can view pending access requests",
+        )
+    pending_users = (
+        db.query(models.User)
+        .filter(models.User.access_status == "pending")
+        .order_by(models.User.id.desc())
+        .all()
     )
 
-    if current_user.role == "principal":
-        users = base_query.filter(
-            models.User.role.in_(["vice_principal", "superintendent"])
-        ).all()
+    return pending_users
 
-    elif current_user.role == "vice_principal":
-        users = base_query.filter(
-            models.User.role.in_(["hod", "superintendent"])
-        ).all()
 
-    elif current_user.role == "hod":
-        users = base_query.filter(models.User.role == "student").all()
-
-    else:
-        users = []
-
-    return users
 
 @app.post("/access/approve/{user_id}")
 def approve_access_request(
@@ -1218,26 +1349,20 @@ def approve_access_request(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    if current_user.role != "admin":
+        raise HTTPException(
+            status_code=403,
+            detail="Only admin can approve requests",
+        )
+
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    if user.id == current_user.id:
-        raise HTTPException(
-            status_code=403,
-            detail="You cannot approve yourself"
-        )
-
-    if user.college_name != current_user.college_name:
-        raise HTTPException(
-            status_code=403,
-            detail="College mismatch"
-        )
-
     if user.access_status != "pending":
         raise HTTPException(
             status_code=400,
-            detail="Request is not pending"
+            detail="Request is not pending",
         )
 
     user.access_status = "approved"
@@ -1252,26 +1377,20 @@ def reject_access_request(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    if current_user.role != "admin":
+        raise HTTPException(
+            status_code=403,
+            detail="Only admin can reject requests",
+        )
+
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    if user.id == current_user.id:
-        raise HTTPException(
-            status_code=403,
-            detail="You cannot reject yourself"
-        )
-
-    if user.college_name != current_user.college_name:
-        raise HTTPException(
-            status_code=403,
-            detail="College mismatch"
-        )
-
     if user.access_status != "pending":
         raise HTTPException(
             status_code=400,
-            detail="Request is not pending"
+            detail="Request is not pending",
         )
 
     user.access_status = "rejected"

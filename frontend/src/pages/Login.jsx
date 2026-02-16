@@ -9,6 +9,8 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showAccessModal, setShowAccessModal] = useState(false);
+
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -31,6 +33,10 @@ export default function Login() {
       const data = await res.json();
 
       if (!res.ok) {
+        if (res.status === 403) {
+          setShowAccessModal(true);
+          return;
+        }
         throw new Error(data.detail || "Invalid email or password");
       }
 
@@ -42,11 +48,32 @@ export default function Login() {
       setError(err.message);
     } finally {
       setLoading(false);
+
     }
   };
 
   return (
     <div className="relative min-h-screen flex items-center justify-center overflow-hidden bg-gradient-to-br from-yellow-50 via-amber-50 to-orange-50">
+      {/* modal */}
+      {showAccessModal && (
+      <div className="fixed inset-0 flex items-center justify-center bg-black/40 backdrop-blur-sm z-50">
+        <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm text-center">
+          <h2 className="text-lg font-semibold text-gray-900 mb-3">
+            Account Not Approved
+          </h2>
+          <p className="text-sm text-gray-600 mb-6">
+            Your account is awaiting admin approval. Please try again later.
+          </p>
+          <button
+            onClick={() => setShowAccessModal(false)}
+            className="px-5 py-2 rounded-lg bg-yellow-400 hover:bg-yellow-500 font-medium"
+          >
+            OK
+          </button>
+        </div>
+      </div>
+    )}
+
       
       {/* Background Blobs */}
       <div className="absolute -top-32 -left-32 h-96 w-96 bg-yellow-300 rounded-full blur-3xl opacity-30" />

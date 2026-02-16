@@ -58,7 +58,6 @@ export default function RequestsTable() {
                   key={req.id}
                   req={req}
                   token={token}
-                  currentRole={currentUser?.role}
                   onDone={removeRequest}
                 />
               ))
@@ -72,7 +71,7 @@ export default function RequestsTable() {
 
 /* ================= ROW ================= */
 
-function Row({ req, token, currentRole, onDone }) {
+function Row({ req, token, onDone }) {
   const roleLabel = (() => {
     if (req.role === "vice_principal") return "Vice Principal";
     if (req.role === "superintendent") return "Superintendent";
@@ -83,22 +82,7 @@ function Row({ req, token, currentRole, onDone }) {
     return req.role;
   })();
 
-  // 🔐 ROLE AUTHORITY MATRIX
-  const canApprove = () => {
-    if (currentRole === "principal") return true;
-    if (currentRole === "vice_principal" && req.role !== "vice_principal")
-      return true;
-    if (currentRole === "hod" && req.role === "student")
-      return true;
-    return false;
-  };
-
-
-  const allowed = canApprove();
-
   const handleAccept = async () => {
-    if (!allowed) return;
-
     try {
       const res = await fetch(
         `http://localhost:8000/access/approve/${req.id}`,
@@ -119,8 +103,6 @@ function Row({ req, token, currentRole, onDone }) {
   };
 
   const handleReject = async () => {
-    if (!allowed) return;
-
     try {
       const res = await fetch(
         `http://localhost:8000/access/reject/${req.id}`,
@@ -157,20 +139,14 @@ function Row({ req, token, currentRole, onDone }) {
       <td className="px-6 py-4 flex gap-3">
         <button
           onClick={handleAccept}
-          disabled={!allowed}
-          className={`px-3 py-1 text-xs rounded text-black
-            ${allowed ? "bg-primary-gradient hover:opacity-90" : "bg-gray-300 cursor-not-allowed"}
-          `}
+          className="px-3 py-1 text-xs rounded text-black bg-primary-gradient hover:opacity-90"
         >
           Accept
         </button>
 
         <button
           onClick={handleReject}
-          disabled={!allowed}
-          className={`px-3 py-1 text-xs rounded text-black
-            ${allowed ? "bg-red-600 hover:opacity-90" : "bg-gray-300 cursor-not-allowed"}
-          `}
+          className="px-3 py-1 text-xs rounded text-black bg-red-600 hover:opacity-90"
         >
           Reject
         </button>
