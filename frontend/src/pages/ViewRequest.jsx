@@ -6,8 +6,7 @@ import CustomLetterPreview from "../components/CustomLetterPreview";
 import html2pdf from "html2pdf.js";
 import { QRCodeCanvas } from "qrcode.react";
 import ArrangeDocumentsModal from "../components/ArrangeDocumentsModal";
-import CertificateDeliveryDetailsModal
-  from "../components/CertificateDeliveryDetailsModal";
+import CertificateDeliveryDetailsModal from "../components/CertificateDeliveryDetailsModal";
 
 
 
@@ -251,33 +250,46 @@ export default function ViewRequest() {
 
 
         if (requestType === "custom") {
-          setData({
-            type: "Custom Letter",
+        setData({
+          type: "Custom Letter",
 
-            studentId: resData.student_id,
-            toUserId: resData.receiver_id,
+          studentId: resData.student_id,
+          toUserId: resData.receiver_id,
 
-            student: {
-              name: resData.student?.name,
-              department: resData.student?.department,
-              college: resData.student?.college,
-            },
+          student: {
+            name: resData.student?.name,
+            department: resData.student?.department,
+            college: resData.student?.college,
+          },
 
-            // ✅ DIRECT receiver
-            receiver: {
-              name: resData.receiver?.name,
-              role: resData.receiver?.role,
-            },
+          receiver: {
+            name: resData.receiver?.name,
+            role: resData.receiver?.role,
+          },
 
-            subject: resData.subject || "Custom Letter",
+          subject: resData.subject || "Custom Letter",
 
-            body: {
-              content: resData.content,
-            },
+          body: {
+            content: resData.content,
+          },
 
-            status: resData.status,
-          });
-        }
+          status: resData.status,
+
+          signature:
+            resData.status === "approved"
+              ? {
+                  name: resData.receiver?.name,
+                  designation: resData.receiver?.role,
+                  approvedAt: resData.updated_at,
+                  image: resData.receiver?.signature_path
+                    ? `http://localhost:8000/${normalizePath(
+                        resData.receiver.signature_path
+                      )}`
+                    : null,
+                }
+              : null,
+        });
+      }
 
 
       })
@@ -337,6 +349,16 @@ export default function ViewRequest() {
 
   /* ---------------- CUSTOM LETTER ---------------- */
   if (requestType === "custom") {
+    const isRecipient = user?.id === data.toUserId;
+    const isPending = data.status === "submitted";
+
+    if (isRecipient && isPending) {
+      return {
+        primary: { label: "Approve", action: "approved" },
+        secondary: { label: "Reject", action: "rejected" },
+      };
+    }
+
     return null;
   }
 
@@ -372,10 +394,12 @@ export default function ViewRequest() {
 
   /* ---------------- CUSTOM LETTER ---------------- */
   else if (requestType === "custom") {
-    apiUrl = `http://localhost:8000/custom-letters/${id}/decision`;
-    payload = { status: action };
+    if (action === "approved") {
+      apiUrl = `http://localhost:8000/custom-letters/${id}/approve`;
+    } else if (action === "rejected") {
+      apiUrl = `http://localhost:8000/custom-letters/${id}/reject`;
+    }
   }
-
   if (!apiUrl) {
     alert("Invalid action");
     return;
@@ -431,7 +455,7 @@ export default function ViewRequest() {
   };
 
 
-  const currentUrl = window.location.href;
+  const verifyUrl = `${window.location.origin}/verify/${requestType}/${id}`;
 
   /* --------------------------------------------------
      UI STATES
@@ -559,19 +583,19 @@ export default function ViewRequest() {
             <div className="space-y-4 text-center">
               <input
                 readOnly
-                value={currentUrl}
+                value={verifyUrl}
                 className="w-full border rounded-md px-3 py-2 text-sm"
               />
 
               <button
-                onClick={() => navigator.clipboard.writeText(currentUrl)}
+                onClick={() => navigator.clipboard.writeText(verifyUrl)}
                 className="w-full py-2 text-sm rounded-md bg-primary-gradient text-black hover:opacity-90"
               >
                 Copy Link
               </button>
 
               <div className="flex justify-center pt-2">
-                <QRCodeCanvas value={currentUrl} size={140} />
+                <QRCodeCanvas value={verifyUrl} size={140} />
               </div>
             </div>
 

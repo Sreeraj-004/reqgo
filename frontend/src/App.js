@@ -6,6 +6,7 @@ import Registration from "./pages/Registration";
 import Dashboard from "./pages/Dashboard";
 import StudentDashboard from "./pages/StudentDashboard";
 import PrincipalDashboard from "./pages/PrincipalDashboard";
+import VerifyRequest from "./pages/VerifyRequest";
 import NewRequestLetter from "./pages/RequestLetter";
 import ViewRequest from "./pages/ViewRequest";
 import ChatPage from "./pages/ChatPage";
@@ -55,6 +56,7 @@ function App() {
         <Route path="/certificate-requests/:id" element={<ViewRequest />} />
         <Route path="/custom-letters/:id" element={<ViewRequest />} />
         <Route path="/messages/new" element={<ChatPage />} />
+        <Route path="/verify/:letter_type/:id" element={<VerifyRequest />} />
       </Routes>
     </BrowserRouter>
   );

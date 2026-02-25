@@ -135,7 +135,7 @@ class UserMini(BaseModel):
 class CustomLetterOut(BaseModel):
     id: int
 
-    # ✅ REQUIRED FOR MESSAGE ROUTING
+    # routing
     student_id: int
     receiver_id: int
 
@@ -145,9 +145,20 @@ class CustomLetterOut(BaseModel):
 
     created_at: datetime
     updated_at: datetime
+    decided_at: datetime | None = None
 
-    # UI convenience
+    # relationships
     student: UserMini
+    receiver: UserSignatureOut | None = None
+
+    class Config:
+        from_attributes = True
+
+class UserSignatureOut(BaseModel):
+    id: int
+    name: str
+    role: str
+    signature_path: str | None
 
     class Config:
         from_attributes = True

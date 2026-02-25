@@ -1,4 +1,6 @@
 export default function CustomLetterPreview({ data }) {
+  const signature = data?.signature || null;
+  const isApproved = data?.status === "approved";
   if (!data) {
     return (
       <div className="w-full max-w-md bg-white rounded-2xl shadow-xl p-8 min-h-[420px] flex items-center justify-center text-sm text-gray-400 text-center">
@@ -10,25 +12,24 @@ export default function CustomLetterPreview({ data }) {
 
   const { student, recipients, to, subject, body, status } = data;
 
-  const designationMap = {
-    hod: `Head of Department, ${student?.department || ""}`,
-    principal: "Principal",
-    vice_principal: "Vice Principal",
-  };
-
-const normalizedTo = to
-  ?.toLowerCase()
-  .replaceAll(" ", "_");
-
-  const toName =
-  data?.receiver?.name ||
-  recipients?.[normalizedTo]?.name ||
+ const normalizedTo =
+  to?.toLowerCase().replaceAll(" ", "_") ||
+  data?.receiver?.role?.toLowerCase() ||
   null;
 
+const designationMap = {
+  hod: `Head of Department, ${student?.department || ""}`,
+  principal: "Principal",
+  vice_principal: "Vice Principal",
+};
 
-const designation = designationMap[normalizedTo];
+const toName =
+  data?.receiver?.name ||
+  (normalizedTo ? recipients?.[normalizedTo]?.name : null) ||
+  null;
 
-
+const designation =
+  normalizedTo ? designationMap[normalizedTo] : null;
 
 
 
@@ -46,7 +47,7 @@ const designation = designationMap[normalizedTo];
             <p className="font-medium">From</p>
             <p className="font-semibold">{student.name}</p>
             {student.department && <p>{student.department} Department</p>}
-            {student.college && <p>{student.college}</p>}
+            Yuvakshetra Inistitute of Management Studies
           </div>
         )}
 
@@ -64,7 +65,8 @@ const designation = designationMap[normalizedTo];
           <div className="space-y-1">
             <p className="font-medium">To</p>
             <p className="font-semibold">{toName}</p>
-            {student?.college && <p>{student.college}</p>}
+            {designation && <p className="text-sm">{designation}</p>}
+            Yuvakshetra Inistitute of Management Studies
           </div>
         )}
 
@@ -97,7 +99,33 @@ const designation = designationMap[normalizedTo];
       </div>
 
       <div className="mt-4 pt-3 border-t text-xs text-gray-500">
-        <span className="font-medium text-gray-700">Current Status:</span>{" "}
+        {/* SIGNATURE */}
+        {isApproved && signature && (
+          <div className=" text-sm">
+            {signature.image && (
+              <img
+                src={signature.image}
+                alt="Signature"
+                crossOrigin="anonymous"
+                className="h-12 object-contain mb-1"
+              />
+            )}
+
+            <p className="text-xs text-gray-600">{signature.name}</p>
+            <p className="text-xs text-gray-500">{signature.designation}</p>
+
+            {signature.approvedAt && (
+              <p className="text-[11px] text-gray-400 mt-1">
+                {new Date(signature.approvedAt).toLocaleDateString("en-GB", {
+                  day: "2-digit",
+                  month: "short",
+                  year: "numeric",
+                })}
+              </p>
+            )}
+          </div>
+        )}
+        <span className="font-medium text-gray-700 ">Current Status:</span>{" "}
         {status}
       </div>
     </div>

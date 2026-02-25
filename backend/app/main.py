@@ -23,6 +23,13 @@ from .websocket.notifications import manager, get_current_user_ws
 from fastapi import WebSocket, WebSocketDisconnect
 from .config import JWT_SECRET_KEY, JWT_ALGORITHM, JWT_EXPIRE_MINUTES
 
+from enum import Enum
+
+class LetterType(str, Enum):
+    leave = "leave"
+    certificate = "certificate"
+    custom = "custom"
+
 
 
 from . import models, schemas
@@ -1209,10 +1216,14 @@ def get_custom_letter(
     current_user: models.User = Depends(get_current_user),
 ):
     letter = (
-        db.query(models.CustomLetterRequest)
-        .filter(models.CustomLetterRequest.id == letter_id)
-        .first()
+    db.query(models.CustomLetterRequest)
+    .options(
+        joinedload(models.CustomLetterRequest.student),
+        joinedload(models.CustomLetterRequest.receiver),
     )
+    .filter(models.CustomLetterRequest.id == letter_id)
+    .first()
+)
 
     if not letter:
         raise HTTPException(404, "Custom letter not found")
@@ -1229,6 +1240,7 @@ def get_custom_letter(
         "subject": letter.subject,
         "status": letter.status,
         "created_at": letter.created_at,
+        "updated_at": letter.updated_at,
         "student": {
             "name": letter.student.name,
             "department": letter.student.department_name,
@@ -1238,6 +1250,7 @@ def get_custom_letter(
         "receiver": {
             "name": letter.receiver.name,
             "role": letter.receiver.role,
+            "signature_path": letter.receiver.signature_path, 
         },
     }
 
@@ -2106,6 +2119,118 @@ async def approve_leave_request(
     }
 
 
+@app.post("/custom-letters/{letter_id}/approve")
+async def approve_custom_letter(
+    letter_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    # Fetch letter
+    letter = (
+        db.query(CustomLetterRequest)
+        .filter(CustomLetterRequest.id == letter_id)
+        .first()
+    )
+
+    if not letter:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Custom letter not found",
+        )
+
+    # Permission check: only receiver can approve
+    if current_user.id != letter.receiver_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not allowed to approve this letter",
+        )
+
+    # Status check
+    if letter.status != "submitted":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Custom letter already decided",
+        )
+
+    # Update
+    letter.status = "approved"
+    letter.decided_by = current_user.id
+    letter.updated_at = datetime.utcnow()
+
+    db.commit()
+
+    # Notify sender
+    await manager.notify(
+        letter.student_id,
+        {
+            "title": "Custom Letter Approved",
+            "message": "Your custom letter has been approved",
+            "type": "CUSTOM_LETTER_APPROVED",
+            "request_id": letter.id,
+        }
+    )
+
+    return {
+        "message": "Custom letter approved successfully",
+        "approved_by": current_user.role,
+    }
+
+@app.post("/custom-letters/{letter_id}/reject")
+async def reject_custom_letter(
+    letter_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    # Fetch letter
+    letter = (
+        db.query(CustomLetterRequest)
+        .filter(CustomLetterRequest.id == letter_id)
+        .first()
+    )
+
+    if not letter:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Custom letter not found",
+        )
+
+    # Permission check
+    if current_user.id != letter.receiver_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not allowed to reject this letter",
+        )
+
+    # Status check
+    if letter.status != "submitted":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Custom letter already decided",
+        )
+
+    # Update
+    letter.status = "rejected"
+    letter.decided_by = current_user.id
+
+    db.commit()
+
+    # Notify sender
+    await manager.notify(
+        letter.student_id,
+        {
+            "title": "Custom Letter Rejected",
+            "message": "Your custom letter has been rejected",
+            "type": "CUSTOM_LETTER_REJECTED",
+            "request_id": letter.id,
+        }
+    )
+
+    return {
+        "message": "Custom letter rejected successfully",
+        "rejected_by": current_user.role,
+    }
+    
+
 @app.post("/users/upload-signature")
 def upload_signature(
     file: UploadFile = File(...),
@@ -2458,3 +2583,179 @@ async def mark_certificate_collected(
         "message": "Certificate marked as collected successfully",
         "certificate_request_id": cert_request.id,
     }
+
+
+@app.get("/verify/{letter_type}/{record_id}")
+def verify_document(
+    letter_type: LetterType,
+    record_id: int,
+    db: Session = Depends(get_db),
+):
+
+    # -------------------- LEAVE --------------------
+    if letter_type == LetterType.leave:
+
+        leave = (
+            db.query(models.LeaveRequest)
+            .options(
+                joinedload(models.LeaveRequest.student),
+                joinedload(models.LeaveRequest.hod),
+            )
+            .filter(models.LeaveRequest.id == record_id)
+            .first()
+        )
+
+        if not leave:
+            raise HTTPException(404, "Leave request not found")
+
+        return {
+            "type": "leave",
+            "id": leave.id,
+            "status": leave.overall_status,
+            "created_at": leave.created_at,
+
+            "student": {
+                "name": leave.student.name,
+                "department": leave.student.department_name,
+                "college": leave.student.college_name,
+            },
+
+            "body": {
+                "from_date": leave.from_date,
+                "to_date": leave.to_date,
+                "reason": leave.reason,
+            },
+
+            "signature": (
+                {
+                    "name": leave.hod.name,
+                    "designation": "Head of Department",
+                    "signature_path": leave.hod.signature_path,
+                    "approved_at": leave.updated_at,
+                }
+                if leave.overall_status == "approved" and leave.hod
+                else None
+            ),
+        }
+
+    # -------------------- CUSTOM LETTER --------------------
+    if letter_type == LetterType.custom:
+
+        letter = (
+            db.query(models.CustomLetterRequest)
+            .options(
+                joinedload(models.CustomLetterRequest.student),
+                joinedload(models.CustomLetterRequest.receiver),
+            )
+            .filter(models.CustomLetterRequest.id == record_id)
+            .first()
+        )
+
+        if not letter:
+            raise HTTPException(404, "Custom letter not found")
+
+        return {
+            "type": "custom",
+            "id": letter.id,
+            "status": letter.status,
+            "created_at": letter.created_at,
+            "updated_at": letter.updated_at,
+
+            "student": {
+                "name": letter.student.name,
+                "department": letter.student.department_name,
+                "college": letter.student.college_name,
+            },
+
+            "receiver": {
+                "name": letter.receiver.name,
+                "role": letter.receiver.role,
+            },
+
+            "subject": letter.subject,
+            "content": letter.content,
+
+            "signature": (
+                {
+                    "name": letter.receiver.name,
+                    "designation": letter.receiver.role,
+                    "signature_path": letter.receiver.signature_path,
+                    "approved_at": letter.updated_at,
+                }
+                if letter.status == "approved" and letter.receiver
+                else None
+            ),
+        }
+
+    # -------------------- CERTIFICATE --------------------
+    if letter_type == LetterType.certificate:
+
+        request = (
+            db.query(models.CertificateRequest)
+            .options(
+                joinedload(models.CertificateRequest.student),
+                joinedload(models.CertificateRequest.hod),
+                joinedload(models.CertificateRequest.vp),
+                joinedload(models.CertificateRequest.principal),
+            )
+            .filter(models.CertificateRequest.id == record_id)
+            .first()
+        )
+
+        if not request:
+            raise HTTPException(404, "Certificate request not found")
+
+        return {
+            "type": "certificate",
+            "id": request.id,
+            "status": request.overall_status,
+            "created_at": request.created_at,
+
+            "student": {
+                "name": request.student.name,
+                "department": request.student.department_name,
+                "college": request.student.college_name,
+            },
+
+            "certificates": (
+                request.certificates.split(",")
+                if request.certificates
+                else []
+            ),
+
+            "purpose": request.purpose,
+
+            "signatures": {
+                "hod": (
+                    {
+                        "name": request.hod.name,
+                        "signature_path": request.hod.signature_path,
+                        "acted_at": request.hod_updated_at,
+                    }
+                    if request.hod and request.hod_updated_at
+                    else None
+                ),
+
+                "vp": (
+                    {
+                        "name": request.vp.name,
+                        "signature_path": request.vp.signature_path,
+                        "acted_at": request.vp_updated_at,
+                    }
+                    if request.vp and request.vp_updated_at
+                    else None
+                ),
+
+                "principal": (
+                    {
+                        "name": request.principal.name,
+                        "signature_path": request.principal.signature_path,
+                        "acted_at": request.principal_updated_at,
+                    }
+                    if request.principal and request.principal_updated_at
+                    else None
+                ),
+            },
+        }
+
+    raise HTTPException(400, "Invalid document type")
