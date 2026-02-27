@@ -3,6 +3,7 @@ import { useState, useRef } from "react";
 import LetterPreview from "../components/LetterPreview";
 import CertificatePreview from "../components/CertificatePreview";
 import CustomLetterPreview from "../components/CustomLetterPreview";
+import collegeImage from "../img/college_1.jpeg";
 
 export default function HeroSection() {
   const navigate = useNavigate();
@@ -121,13 +122,13 @@ export default function HeroSection() {
 
         {/* Background Image */}
         <img
-          src="https://images.unsplash.com/photo-1562774053-701939374585?q=80&w=1920&auto=format&fit=crop"
+          src={collegeImage}
           alt="College Campus"
           className="absolute inset-0 w-full h-full object-cover opacity-50"
         />
 
         {/* Overlay */}
-        <div className="absolute inset-0 bg-white/60 backdrop-blur-sm"></div>
+        <div className="absolute inset-0 backdrop-blur-sm"></div>
 
         {/* Content */}
         <div className="container mx-auto px-6 grid grid-cols-1 md:grid-cols-2 gap-12 items-center relative z-10">
@@ -269,6 +270,8 @@ export default function HeroSection() {
 
       {/* ================= FINAL CTA ================= */}
       <div className="py-24 bg-gradient-to-r from-yellow-100 to-amber-100 text-center">
+        
+        
         <h2 className="text-3xl font-bold mb-6">
           Ready to Go Paperless?
         </h2>
