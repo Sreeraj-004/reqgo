@@ -430,31 +430,35 @@ export default function ViewRequest() {
      PDF Download
   -------------------------------------------------- */
   const downloadPDF = () => {
-    if (!previewRef.current || !data) return;
+  if (!previewRef.current || !data) return;
 
-    const filename = `${data.studentName}_${requestType}_request.pdf`;
+  const filename = `${data.student?.name || "request"}_${requestType}_request.pdf`;
 
-    html2pdf()
-      .set({
-        margin: 15,
-        filename,
-        image: { type: "jpeg", quality: 0.98 },
-        html2canvas: {
-          scale: 2,
-          useCORS: true,       
-          allowTaint: true,   
-        },
-        jsPDF: {
-          unit: "mm",
-          format: "a4",
-          orientation: "portrait",
-        },
-      })
-      .from(previewRef.current)
-      .save();
-  };
+  const element = previewRef.current.cloneNode(true);
 
+  element.style.transform = "scale(0.9)";
+  element.style.transformOrigin = "top left";
+  element.style.width = "111%"; 
 
+  html2pdf()
+    .set({
+      margin: 15,
+      filename,
+      image: { type: "jpeg", quality: 0.98 },
+      html2canvas: {
+        scale: 2,
+        useCORS: true,
+        allowTaint: true,
+      },
+      jsPDF: {
+        unit: "mm",
+        format: "a4",
+        orientation: "portrait",
+      },
+    })
+    .from(element)
+    .save();
+};
   const verifyUrl = `${window.location.origin}/verify/${requestType}/${id}`;
 
   /* --------------------------------------------------

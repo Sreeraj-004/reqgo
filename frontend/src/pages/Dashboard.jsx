@@ -91,7 +91,7 @@ export default function Dashboard() {
           <div>
             <h1 className="text-4xl">Welcome {user.name}</h1>
             <hr className="mt-2"></hr>
-            <h3 className="text-lg mt-2">{user.role} Dashboard</h3>
+            <h3 className="text-lg mt-2">{user.role.replace("_", " ")} Dashboard</h3>
           </div>
 
           <button

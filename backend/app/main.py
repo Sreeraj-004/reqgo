@@ -1637,7 +1637,7 @@ def get_all_requests(
         for cert in certificates:
             results.append({
                 "id": cert.id,
-                "sender": current_user.name,
+                "sender": cert.student.name,
                 "type": "Certificate",
                 "subject": "Certificate Request",
                 "created_at": cert.created_at,
