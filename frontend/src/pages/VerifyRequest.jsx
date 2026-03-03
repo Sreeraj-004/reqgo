@@ -32,7 +32,6 @@ export default function VerifyRequest() {
             student: resData.student,
             body: resData.body,
             status: resData.status,
-
             signature: resData.signature
               ? {
                   name: resData.signature.name,
@@ -47,7 +46,6 @@ export default function VerifyRequest() {
               : null,
           });
         }
-
         if (resData.type === "custom") {
           setData({
             type: "Custom Letter",
@@ -73,55 +71,63 @@ export default function VerifyRequest() {
         }
 
         if (resData.type === "certificate") {
-          setData({
-            type: "Certificate Request",
-            student: resData.student,
-            certificates: resData.certificates,
-            purpose: resData.purpose,
-            status: resData.status,
+        setData({
+          type: "Certificate Request",
 
-            signatures: {
-              hod: resData.signatures?.hod
-                ? {
-                    name: resData.signatures.hod.name,
-                    designation: "Head of Department",
-                    approvedAt: resData.signatures.hod.acted_at,
-                    image: resData.signatures.hod.signature_path
-                      ? `http://localhost:8000/${normalizePath(
-                          resData.signatures.hod.signature_path
-                        )}`
-                      : null,
-                  }
-                : null,
+          student: resData.student,
 
-              vp: resData.signatures?.vp
-                ? {
-                    name: resData.signatures.vp.name,
-                    designation: "Vice Principal",
-                    approvedAt: resData.signatures.vp.acted_at,
-                    image: resData.signatures.vp.signature_path
-                      ? `http://localhost:8000/${normalizePath(
-                          resData.signatures.vp.signature_path
-                        )}`
-                      : null,
-                  }
-                : null,
+          certificates: Array.isArray(resData.certificates)
+            ? resData.certificates
+            : typeof resData.certificates === "string"
+              ? resData.certificates.split(",").map(c => c.trim())
+              : [],
 
-              principal: resData.signatures?.principal
-                ? {
-                    name: resData.signatures.principal.name,
-                    designation: "Principal",
-                    approvedAt: resData.signatures.principal.acted_at,
-                    image: resData.signatures.principal.signature_path
-                      ? `http://localhost:8000/${normalizePath(
-                          resData.signatures.principal.signature_path
-                        )}`
-                      : null,
-                  }
-                : null,
-            },
-          });
-        }
+          certificatePurpose: resData.purpose || "",
+
+          status: resData.status,
+
+          signatures: {
+            hod: resData.signatures?.hod
+              ? {
+                  name: resData.signatures.hod.name,
+                  designation: "Head of Department",
+                  approvedAt: resData.signatures.hod.acted_at,
+                  image: resData.signatures.hod.signature_path
+                    ? `http://localhost:8000/${normalizePath(
+                        resData.signatures.hod.signature_path
+                      )}`
+                    : null,
+                }
+              : null,
+
+            vp: resData.signatures?.vp
+              ? {
+                  name: resData.signatures.vp.name,
+                  designation: "Vice Principal",
+                  approvedAt: resData.signatures.vp.acted_at,
+                  image: resData.signatures.vp.signature_path
+                    ? `http://localhost:8000/${normalizePath(
+                        resData.signatures.vp.signature_path
+                      )}`
+                    : null,
+                }
+              : null,
+
+            principal: resData.signatures?.principal
+              ? {
+                  name: resData.signatures.principal.name,
+                  designation: "Principal",
+                  approvedAt: resData.signatures.principal.acted_at,
+                  image: resData.signatures.principal.signature_path
+                    ? `http://localhost:8000/${normalizePath(
+                        resData.signatures.principal.signature_path
+                      )}`
+                    : null,
+                }
+              : null,
+          },
+        });
+      }
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
